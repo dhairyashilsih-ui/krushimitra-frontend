@@ -126,40 +126,50 @@ export default function CropDiseaseDetectionScreen() {
       setIsScanning(true);
       setAnalysisResult(null);
 
-      const apiUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const apiUrl =
+        process.env.EXPO_PUBLIC_BACKEND_URL ||
+        'https://krushimitra2-0-backend.onrender.com';
 
       const formData = new FormData();
-      // @ts-ignore - ReactNative FormData expects 'uri', 'name', 'type'
-      formData.append('file', {
-        uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
-        name: 'photo.jpg',
-        type: 'image/jpeg',
-      });
-      formData.append('organ', 'leaf'); // Default to leaf as requested
 
-      const response = await fetch(`${apiUrl}/predict`, {
+      if (Platform.OS === 'web') {
+        // ✅ WEB FIX (THIS WAS MISSING)
+        const response = await fetch(uri);
+        const blob = await response.blob();
+
+        formData.append('file', blob, 'photo.jpg');
+      } else {
+        // ✅ ANDROID / IOS
+        formData.append('file', {
+          uri: uri,
+          name: 'photo.jpg',
+          type: 'image/jpeg',
+        } as any);
+      }
+
+      formData.append('organ', 'leaf');
+
+      const res = await fetch(`${apiUrl}/predict`, {
         method: 'POST',
-
-        body: formData,
+        body: formData, // ❌ no headers
       });
 
-      const data = await response.json();
-      console.log("Analysis Result:", data);
+      const data = await res.json();
+      console.log('Analysis Result:', data);
 
       if (data.success) {
         setAnalysisResult(data);
       } else {
         Alert.alert('Analysis Failed', data.message || 'Could not analyze image.');
-        setAnalysisResult(null); // Clear result on failure
       }
-
-    } catch (error) {
-      console.error('Upload Error:', error);
+    } catch (err) {
+      console.error('Upload Error:', err);
       Alert.alert('Error', 'Failed to connect to the server.');
     } finally {
       setIsScanning(false);
     }
   };
+
 
   const pickImage = async (useCamera: boolean) => {
     try {
