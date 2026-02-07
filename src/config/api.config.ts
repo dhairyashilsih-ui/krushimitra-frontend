@@ -42,7 +42,7 @@ const CLOUD_LLM_ENDPOINTS = {
     priority: 1,
     healthCheck: 'https://openrouter.ai/api/v1/models'
   },
-  
+
   // Option 2: Groq (free tier, very fast Llama3)
   groq: {
     name: 'Groq',
@@ -51,7 +51,7 @@ const CLOUD_LLM_ENDPOINTS = {
     priority: 1,
     healthCheck: 'https://api.groq.com/openai/v1/models'
   },
-  
+
   // Option 3: Together.ai (good free tier)
   together: {
     name: 'Together AI',
@@ -87,7 +87,7 @@ const LOCAL_OLLAMA_ENDPOINTS = {
  */
 export function getAPIConfig(): APIConfig {
   const env = (process.env.EXPO_PUBLIC_ENVIRONMENT || 'hybrid') as Environment;
-  
+
   // Production: Cloud-only (most reliable)
   if (env === 'production') {
     return {
@@ -119,7 +119,7 @@ export function getAPIConfig(): APIConfig {
       }
     };
   }
-  
+
   // Development: Local-only
   if (env === 'development') {
     return {
@@ -131,7 +131,7 @@ export function getAPIConfig(): APIConfig {
       tts: {
         primary: {
           name: 'Backend TTS Local',
-          url: process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3001',
+          url: process.env.EXPO_PUBLIC_BACKEND_URL || 'https://krushimitra2-0-backend.onrender.com',
           type: 'local',
           priority: 1
         }
@@ -139,14 +139,14 @@ export function getAPIConfig(): APIConfig {
       backend: {
         primary: {
           name: 'Backend Local',
-          url: process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3001',
+          url: process.env.EXPO_PUBLIC_BACKEND_URL || 'https://krushimitra2-0-backend.onrender.com',
           type: 'local',
           priority: 1
         }
       }
     };
   }
-  
+
   // Hybrid: Try local first, fallback to cloud (best of both worlds)
   return {
     environment: env,
@@ -157,7 +157,7 @@ export function getAPIConfig(): APIConfig {
     tts: {
       primary: {
         name: 'Backend TTS',
-        url: process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3001',
+        url: process.env.EXPO_PUBLIC_BACKEND_URL || 'https://krushimitra2-0-backend.onrender.com',
         type: 'local',
         priority: 1
       },
@@ -171,7 +171,7 @@ export function getAPIConfig(): APIConfig {
     backend: {
       primary: {
         name: 'Backend Local',
-        url: process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3001',
+        url: process.env.EXPO_PUBLIC_BACKEND_URL || 'https://krushimitra2-0-backend.onrender.com',
         type: 'local',
         priority: 1
       }
