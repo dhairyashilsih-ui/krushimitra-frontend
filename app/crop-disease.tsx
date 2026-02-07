@@ -139,9 +139,7 @@ export default function CropDiseaseDetectionScreen() {
 
       const response = await fetch(`${apiUrl}/predict`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+
         body: formData,
       });
 
@@ -343,27 +341,27 @@ export default function CropDiseaseDetectionScreen() {
                     {analysisResult.disease_detection.disease}
                   </Text>
                 </View>
-                
+
                 {analysisResult.disease_detection.severity && (
                   <View style={styles.resultRow}>
                     <Text style={styles.label}>Severity:</Text>
-                    <Text style={[styles.value, 
-                      analysisResult.disease_detection.severity === 'High' ? { color: '#EF4444' } :
+                    <Text style={[styles.value,
+                    analysisResult.disease_detection.severity === 'High' ? { color: '#EF4444' } :
                       analysisResult.disease_detection.severity === 'Medium' ? { color: '#F59E0B' } :
-                      { color: '#4CAF50' }
+                        { color: '#4CAF50' }
                     ]}>
                       {analysisResult.disease_detection.severity}
                     </Text>
                   </View>
                 )}
-                
+
                 <View style={styles.resultRow}>
                   <Text style={styles.label}>Confidence:</Text>
                   <Text style={[styles.value, { color: getConfidenceColor(analysisResult.disease_detection.confidence) }]}>
                     {(analysisResult.disease_detection.confidence * 100).toFixed(1)}%
                   </Text>
                 </View>
-                
+
                 {analysisResult.disease_detection.details && (
                   <Text style={styles.detailsText}>{analysisResult.disease_detection.details}</Text>
                 )}
@@ -376,7 +374,7 @@ export default function CropDiseaseDetectionScreen() {
                     <Shield size={20} color="#F59E0B" />
                     <Text style={styles.sectionTitle}>Recommendations</Text>
                   </View>
-                  
+
                   {/* Display AI advice if available */}
                   {analysisResult.disease_detection.advice ? (
                     <Text style={styles.recommendationText}>
