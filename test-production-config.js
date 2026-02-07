@@ -5,7 +5,7 @@
 
 // Simulate production environment variables
 process.env.EXPO_PUBLIC_ENVIRONMENT = 'production';
-process.env.EXPO_PUBLIC_BACKEND_URL = 'https://krushimitra-backend-1.onrender.com';
+process.env.EXPO_PUBLIC_BACKEND_URL = 'https://krushimitra2-0-backend.onrender.com';
 process.env.EXPO_PUBLIC_OLLAMA_SERVER = 'https://measurement-worked-contamination-sustainable.trycloudflare.com';
 process.env.EXPO_PUBLIC_LLM_MODE = 'cloud';
 

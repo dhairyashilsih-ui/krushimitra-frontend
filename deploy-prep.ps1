@@ -26,7 +26,8 @@ if (-not (Test-Path .env.production)) {
     Write-Host "⚠️  .env.production not found - creating from template..." -ForegroundColor Yellow
     Copy-Item .env.example .env.production
     Write-Host "📝 Please edit .env.production with your production values" -ForegroundColor Yellow
-} else {
+}
+else {
     Write-Host "✅ .env.production found" -ForegroundColor Green
 }
 
@@ -36,13 +37,13 @@ Write-Host ""
 
 # Display current environment variables
 Write-Host "Current Production Configuration:" -ForegroundColor Yellow
-Write-Host "  Backend URL: https://krushimitra-backend-1.onrender.com" -ForegroundColor White
+Write-Host "  Backend URL: https://krushimitra2-0-backend.onrender.com" -ForegroundColor White
 Write-Host "  LLM Server: https://measurement-worked-contamination-sustainable.trycloudflare.com" -ForegroundColor White
 Write-Host ""
 
 Write-Host "🔧 Required Environment Variables for Vercel:" -ForegroundColor Cyan
 Write-Host "  1. EXPO_PUBLIC_ENVIRONMENT=production"
-Write-Host "  2. EXPO_PUBLIC_BACKEND_URL=https://krushimitra-backend-1.onrender.com"
+Write-Host "  2. EXPO_PUBLIC_BACKEND_URL=https://krushimitra2-0-backend.onrender.com"
 Write-Host "  3. EXPO_PUBLIC_OLLAMA_SERVER=https://measurement-worked-contamination-sustainable.trycloudflare.com"
 Write-Host "  4. EXPO_PUBLIC_FIREBASE_* (all Firebase config variables)"
 Write-Host ""
@@ -72,7 +73,8 @@ if ($testBuild -eq "y" -or $testBuild -eq "Y") {
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✅ Build successful!" -ForegroundColor Green
         Write-Host "📁 Output directory: dist-web" -ForegroundColor White
-    } else {
+    }
+    else {
         Write-Host "❌ Build failed - please fix errors before deploying" -ForegroundColor Red
         exit 1
     }
