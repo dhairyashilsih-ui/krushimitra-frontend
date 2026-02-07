@@ -40,7 +40,7 @@ export async function* queryLLMStream(
   const mode = getLLMMode();
   console.log('🤖 LLM Mode:', mode);
   console.log('📋 User Context:', userContext ? 'Included' : 'Not provided');
-  
+
   // Hybrid mode: Try local first, then cloud
   if (mode === 'hybrid') {
     try {
@@ -58,7 +58,7 @@ export async function* queryLLMStream(
       }
     }
   }
-  
+
   // Cloud-only mode
   if (mode === 'cloud') {
     try {
@@ -69,7 +69,7 @@ export async function* queryLLMStream(
       throw error;
     }
   }
-  
+
   // Local-only mode
   yield* queryLocalOnly(prompt, userContext);
 }
@@ -80,18 +80,18 @@ export async function* queryLLMStream(
 async function* queryCloudOnly(prompt: string, userContext?: any): AsyncGenerator<string> {
   const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY || process.env.EXPO_PUBLIC_CLOUD_LLM_API_KEY;
   const provider = (process.env.EXPO_PUBLIC_CLOUD_LLM_PROVIDER || 'groq') as any;
-  
+
   if (!apiKey) {
     throw new Error('Cloud LLM API key not configured. Set EXPO_PUBLIC_GROQ_API_KEY in .env');
   }
-  
+
   console.log(`☁️ Using cloud LLM: ${provider}`);
-  
+
   // Build user context data
   const userName = userContext?.user_data?.user_name || 'किसान';
   const userLocation = userContext?.user_data?.user_location?.address || 'अज्ञात स्थान';
   const currentWeather = userContext?.weather_data?.current?.description || 'जानकारी उपलब्ध नहीं';
-  
+
   // Build prompt with the requested format
   const systemPrompt = `You are KrushiAI, a simple farming assistant.
 Start the answer with the user's name.
@@ -101,25 +101,25 @@ User location = ${userLocation}
 Weather at that location = ${currentWeather}
 
 Use this data to answer the user's question.`;
-  
+
   const userMessage = `--- USER QUESTION ---
 ${prompt}
 -----------------------
 
 Your Answer (in Hindi):`;
-  
+
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userMessage }
   ];
-  
+
   const config: CloudLLMConfig = {
     provider,
     apiKey,
-    model: process.env.EXPO_PUBLIC_CLOUD_LLM_MODEL || 
-           (provider === 'groq' ? 'llama3-8b-8192' : 'meta-llama/llama-3-8b-instruct')
+    model: process.env.EXPO_PUBLIC_CLOUD_LLM_MODEL ||
+      (provider === 'groq' ? 'llama-3.1-8b-instant' : 'meta-llama/llama-3.1-8b-instruct')
   };
-  
+
   console.log('📤 Sending to cloud LLM:', {
     provider: config.provider,
     model: config.model,
@@ -128,7 +128,7 @@ Your Answer (in Hindi):`;
     systemPromptLength: systemPrompt.length,
     userMessageLength: userMessage.length
   });
-  
+
   yield* queryCloudLLMStream(messages, config);
 }
 
@@ -140,7 +140,7 @@ async function* queryLocalOnly(prompt: string, userContext?: any): AsyncGenerato
   const userName = userContext?.user_data?.user_name || 'किसान';
   const userLocation = userContext?.user_data?.user_location?.address || 'अज्ञात स्थान';
   const currentWeather = userContext?.weather_data?.current?.description || 'जानकारी उपलब्ध नहीं';
-  
+
   // Build prompt with the requested format
   const fullPrompt = `You are KrushiAI, a simple farming assistant.
 Start the answer with the user's name.
@@ -156,7 +156,7 @@ ${prompt}
 -----------------------
 
 Your Answer (in Hindi):`;
-  
+
   console.log('📝 Formatted Prompt:', fullPrompt.substring(0, 200) + '...');
   yield* queryOllamaStream(fullPrompt);
 }
@@ -167,7 +167,7 @@ Your Answer (in Hindi):`;
 export async function queryLLM(prompt: string): Promise<LLMResponse> {
   let fullResponse = '';
   const mode = getLLMMode();
-  
+
   try {
     for await (const chunk of queryLLMStream(prompt)) {
       fullResponse += chunk;

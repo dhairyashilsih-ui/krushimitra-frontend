@@ -23,22 +23,22 @@ const PROVIDER_CONFIGS = {
   groq: {
     baseURL: 'https://api.groq.com/openai/v1',
     models: {
-      llama3: 'llama3-70b-8192',
-      llama3Fast: 'llama3-8b-8192'
+      llama3: 'llama-3.1-70b-versatile',
+      llama3Fast: 'llama-3.1-8b-instant'
     }
   },
   openrouter: {
     baseURL: 'https://openrouter.ai/api/v1',
     models: {
-      llama3: 'meta-llama/llama-3-70b-instruct',
-      llama3Fast: 'meta-llama/llama-3-8b-instruct'
+      llama3: 'meta-llama/llama-3.1-70b-instruct',
+      llama3Fast: 'meta-llama/llama-3.1-8b-instruct'
     }
   },
   together: {
     baseURL: 'https://api.together.xyz/v1',
     models: {
-      llama3: 'meta-llama/Llama-3-70b-chat-hf',
-      llama3Fast: 'meta-llama/Llama-3-8b-chat-hf'
+      llama3: 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
+      llama3Fast: 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo'
     }
   }
 };
@@ -52,9 +52,9 @@ export async function* queryCloudLLMStream(
 ): AsyncGenerator<string> {
   const providerConfig = PROVIDER_CONFIGS[config.provider];
   const endpoint = `${providerConfig.baseURL}/chat/completions`;
-  
+
   console.log(`🌐 Querying ${config.provider} LLM...`);
-  
+
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -74,7 +74,7 @@ export async function* queryCloudLLMStream(
         max_tokens: 2048
       })
     });
-    
+
     if (!response.ok || !response.body) {
       // Get error details from response
       let errorDetails = `${response.status} ${response.statusText}`;
@@ -87,28 +87,28 @@ export async function* queryCloudLLMStream(
       }
       throw new Error(`${config.provider} request failed: ${errorDetails}`);
     }
-    
+
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    
+
     try {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        
+
         buffer += decoder.decode(value, { stream: true });
-        
+
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
-        
+
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed || !trimmed.startsWith('data: ')) continue;
-          
+
           const data = trimmed.slice(6);
           if (data === '[DONE]') return;
-          
+
           try {
             const parsed = JSON.parse(data);
             const content = parsed.choices?.[0]?.delta?.content;
@@ -140,7 +140,7 @@ export async function queryCloudLLM(
 ): Promise<string> {
   const providerConfig = PROVIDER_CONFIGS[config.provider];
   const endpoint = `${providerConfig.baseURL}/chat/completions`;
-  
+
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -160,11 +160,11 @@ export async function queryCloudLLM(
         max_tokens: 2048
       })
     });
-    
+
     if (!response.ok) {
       throw new Error(`${config.provider} request failed: ${response.status}`);
     }
-    
+
     const data = await response.json();
     return data.choices?.[0]?.message?.content || '';
   } catch (error) {
@@ -181,10 +181,10 @@ export async function queryCloudLLM(
 export function getCloudLLMConfig(): CloudLLMConfig {
   const provider = (process.env.EXPO_PUBLIC_CLOUD_LLM_PROVIDER || 'groq') as CloudLLMProvider;
   const apiKey = process.env.EXPO_PUBLIC_CLOUD_LLM_API_KEY || '';
-  
+
   const providerConfig = PROVIDER_CONFIGS[provider];
   const model = process.env.EXPO_PUBLIC_CLOUD_LLM_MODEL || providerConfig.models.llama3Fast;
-  
+
   return {
     provider,
     apiKey,
