@@ -93,14 +93,7 @@ export default function CropDiseaseDetectionScreen() {
   const fadeAnimation = useRef(new Animated.Value(0)).current;
   const scaleAnimation = useRef(new Animated.Value(0.95)).current;
   const pulseAnimation = useRef(new Animated.Value(1)).current;
-
-  // New: Scanner Animation (0 -> 1 loop)
-  const scannerAnim = useRef(new Animated.Value(0)).current;
-
-  // New: Result Stagger Animation
-  const resultCardAnim = useRef(new Animated.Value(0)).current;
-  const analysisDetailsAnim = useRef(new Animated.Value(0)).current;
-  const treatmentAnim = useRef(new Animated.Value(0)).current;
+  const resultFadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Intro Animation
@@ -135,33 +128,14 @@ export default function CropDiseaseDetectionScreen() {
     ).start();
   }, []);
 
-  // Scanner Loop
-  useEffect(() => {
-    if (isScanning) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(scannerAnim, {
-            toValue: 1,
-            duration: 2000,
-            easing: Easing.linear,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scannerAnim, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: true
-          })
-        ])
-      ).start();
-    } else {
-      scannerAnim.setValue(0);
-    }
-  }, [isScanning]);
-
   // Simulate Steps Progression
   useEffect(() => {
     if (isScanning) {
       setCurrentStep(1);
+      // We will manually advance steps roughly every 1-1.5 seconds 
+      // to simulate the pipeline visually while the backend works.
+      // The backend usually takes 4-6 seconds, so this fits well.
+
       const step1 = setTimeout(() => setCurrentStep(2), 1500);
       const step2 = setTimeout(() => setCurrentStep(3), 3000);
       const step3 = setTimeout(() => setCurrentStep(4), 4500);
@@ -172,22 +146,16 @@ export default function CropDiseaseDetectionScreen() {
         clearTimeout(step3);
       };
     } else {
-      // Results Reveal Sequence
+      // Reset or Finish
       if (analysisResult) {
         setCurrentStep(5); // Done
-
-        // Staggered Entrance
-        Animated.stagger(200, [
-          Animated.spring(resultCardAnim, { toValue: 1, useNativeDriver: true, friction: 8 }),
-          Animated.spring(analysisDetailsAnim, { toValue: 1, useNativeDriver: true, friction: 8 }),
-          Animated.spring(treatmentAnim, { toValue: 1, useNativeDriver: true, friction: 8 }),
-        ]).start();
-
+        Animated.timing(resultFadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
       } else {
         setCurrentStep(0);
-        resultCardAnim.setValue(0);
-        analysisDetailsAnim.setValue(0);
-        treatmentAnim.setValue(0);
       }
     }
   }, [isScanning, analysisResult]);
@@ -200,16 +168,14 @@ export default function CropDiseaseDetectionScreen() {
     try {
       setIsScanning(true);
       setAnalysisResult(null);
-      // Reset animations
-      resultCardAnim.setValue(0);
-      analysisDetailsAnim.setValue(0);
-      treatmentAnim.setValue(0);
+      resultFadeAnim.setValue(0);
 
       const apiUrl =
         process.env.EXPO_PUBLIC_BACKEND_URL ||
         'https://krushimitra2-0-backend.onrender.com';
 
       const formData = new FormData();
+
       if (Platform.OS === 'web') {
         const response = await fetch(uri);
         const blob = await response.blob();
@@ -221,6 +187,7 @@ export default function CropDiseaseDetectionScreen() {
           type: 'image/jpeg',
         } as any);
       }
+
       formData.append('organ', 'leaf');
 
       const res = await fetch(`${apiUrl}/predict`, {
@@ -231,6 +198,8 @@ export default function CropDiseaseDetectionScreen() {
       const data = await res.json();
       console.log('Analysis Result:', data);
 
+      // Ensure animation has reached at least step 4 before showing result
+      // This prevents "instant" glitch if server is too fast (cached)
       setTimeout(() => {
         if (data.success) {
           setAnalysisResult(data);
@@ -238,7 +207,7 @@ export default function CropDiseaseDetectionScreen() {
           Alert.alert('Analysis Failed', data.message || 'Could not analyze image.');
         }
         setIsScanning(false);
-      }, 500);
+      }, 500); // minimal delay to let step 4 show briefly
 
     } catch (err) {
       console.error('Upload Error:', err);
@@ -287,13 +256,19 @@ export default function CropDiseaseDetectionScreen() {
     }
   };
 
+  const getConfidenceColor = (score: number) => {
+    if (score >= 0.8) return '#4CAF50'; // High - Green
+    if (score >= 0.5) return '#F59E0B'; // Medium - Orange
+    return '#EF4444'; // Low - Red
+  };
+
   const hasDisease = analysisResult?.disease_detection.disease !== 'Healthy';
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <LinearGradient
-        colors={['#FFFFFF', '#F0F7F7', '#E0F2F1']}
+        colors={['#FFFFFF', '#F0F7F0', '#E0F2F1']}
         style={styles.backgroundGradient}
       >
         {/* Header */}
@@ -318,54 +293,35 @@ export default function CropDiseaseDetectionScreen() {
                 <>
                   <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="cover" />
 
-                  {/* SCANNER OVERLAY */}
+                  {/* Analysis Overlay */}
                   {isScanning && (
                     <View style={styles.overlayContainer}>
-                      {/* Grid Background */}
-                      <View style={styles.gridOverlay} />
+                      <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+                      <View style={styles.stepsContainer}>
+                        {ANALYSIS_STEPS.map((step) => {
+                          const isActive = currentStep === step.id;
+                          const isCompleted = currentStep > step.id;
+                          const isPending = currentStep < step.id;
 
-                      {/* Moving Laser */}
-                      <Animated.View style={[
-                        styles.laserLine,
-                        {
-                          transform: [{
-                            translateY: scannerAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0, 320] // Height of image container
-                            })
-                          }]
-                        }
-                      ]} />
-
-                      {/* Steps */}
-                      <View style={styles.stepsWrapper}>
-                        <BlurView intensity={40} tint="dark" style={styles.stepsBlur} />
-                        <View style={styles.stepsContainer}>
-                          {ANALYSIS_STEPS.map((step) => {
-                            const isActive = currentStep === step.id;
-                            const isCompleted = currentStep > step.id;
-                            const isPending = currentStep < step.id;
-
-                            return (
-                              <View key={step.id} style={[styles.stepRow, { opacity: isPending ? 0.4 : 1 }]}>
-                                <View style={[styles.stepIcon,
-                                isActive && styles.stepIconActive,
-                                isCompleted && styles.stepIconCompleted
-                                ]}>
-                                  {isCompleted ? (
-                                    <Check size={12} color="#FFF" />
-                                  ) : (
-                                    <step.icon size={12} color={isActive ?= "#FFF" : "#CCC"} />
-                                  )}
-                                </View>
-                                <Text style={[styles.stepText, isActive && styles.stepTextActive]}>
-                                  {step.label}
-                                </Text>
-                                {isActive && <ActivityIndicator size="small" color="#4CAF50" style={{ marginLeft: 'auto' }} />}
+                          return (
+                            <View key={step.id} style={[styles.stepRow, { opacity: isPending ? 0.5 : 1 }]}>
+                              <View style={[styles.stepIcon,
+                              isActive && styles.stepIconActive,
+                              isCompleted && styles.stepIconCompleted
+                              ]}>
+                                {isCompleted ? (
+                                  <Check size={14} color="#FFF" />
+                                ) : (
+                                  <step.icon size={14} color={isActive ? "#FFF" : "#CCC"} />
+                                )}
                               </View>
-                            )
-                          })}
-                        </View>
+                              <Text style={[styles.stepText, isActive && styles.stepTextActive]}>
+                                {step.label}
+                              </Text>
+                              {isActive && <ActivityIndicator size="small" color="#4CAF50" style={{ marginLeft: 'auto' }} />}
+                            </View>
+                          )
+                        })}
                       </View>
                     </View>
                   )}
@@ -403,71 +359,68 @@ export default function CropDiseaseDetectionScreen() {
             </View>
           </Animated.View>
 
-          {/* Results Section - SEQUENTIAL REVEAL */}
+          {/* Results Section */}
           {analysisResult && (
-            <View style={styles.resultsSection}>
+            <Animated.View style={[styles.resultsSection, { opacity: resultFadeAnim, transform: [{ translateY: resultFadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
 
-              {/* 1. STATUS HEADER */}
-              <Animated.View style={{ opacity: resultCardAnim, transform: [{ translateY: resultCardAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
-                <LinearGradient
-                  colors={hasDisease ? ['#FEF2F2', '#FFF5F5'] : ['#F1F8E9', '#F0FDF4']}
-                  style={[styles.statusCard, hasDisease ? styles.statusDanger : styles.statusSuccess]}
-                >
-                  <View style={styles.statusIconContainer}>
-                    {hasDisease ? <Bug size={24} color="#EF4444" /> : <Shield size={24} color="#4CAF50" />}
-                  </View>
-                  <View style={styles.statusTextContainer}>
-                    <Text style={styles.statusTitle}>
-                      {analysisResult.disease_detection.disease}
-                    </Text>
-                    <Text style={styles.statusSubtitle}>
-                      {analysisResult.plant_identification.plant_common} • {(analysisResult.disease_detection.confidence * 100).toFixed(0)}% Confidence
-                    </Text>
-                  </View>
-                </LinearGradient>
-              </Animated.View>
-
-              {/* 2. DIAGNOSIS DETAILS */}
-              <Animated.View style={{ opacity: analysisDetailsAnim, transform: [{ translateY: analysisDetailsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
-                <View style={[styles.detailsCard, { borderLeftColor: hasDisease ? '#EF4444' : '#4CAF50', borderLeftWidth: 4 }]}>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.sectionHeader}>Diagnosis Report</Text>
-                    <View style={styles.aiTag}>
-                      <Sparkles size={12} color="#F59E0B" />
-                      <Text style={styles.aiTagText}>AI Analysis</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.adviceText}>{analysisResult.ai_solution?.treatment || analysisResult.disease_detection.details}</Text>
+              {/* STATUS HEADER - Simplified & Clean */}
+              <View style={[styles.statusCard, hasDisease ? styles.statusDanger : styles.statusSuccess]}>
+                <View style={styles.statusIconContainer}>
+                  {hasDisease ? <Bug size={24} color="#EF4444" /> : <Shield size={24} color="#4CAF50" />}
                 </View>
-              </Animated.View>
+                <View style={styles.statusTextContainer}>
+                  <Text style={styles.statusTitle}>
+                    {analysisResult.disease_detection.disease}
+                  </Text>
+                  <Text style={styles.statusSubtitle}>
+                    {analysisResult.plant_identification.plant_common} • {(analysisResult.disease_detection.confidence * 100).toFixed(0)}% Confidence
+                  </Text>
+                </View>
+              </View>
 
-              {/* 3. TREATMENT & PREVENTION */}
-              {analysisResult.ai_solution && (
-                <Animated.View style={{ opacity: treatmentAnim, transform: [{ translateY: treatmentAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
-                  <View style={styles.detailsCard}>
-                    <Text style={[styles.sectionHeader, { marginBottom: 15 }]}>Recommended Action</Text>
-
-                    {analysisResult.ai_solution.prevention.map((tip, idx) => (
-                      <View key={idx} style={styles.checkListItem}>
-                        <CheckCircle size={16} color="#4CAF50" style={{ marginTop: 2 }} />
-                        <Text style={styles.listText}>{tip}</Text>
-                      </View>
-                    ))}
-
-                    <View style={styles.tipsBox}>
-                      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
-                        <Zap size={14} color="#1D4ED8" />
-                        <Text style={styles.tipsBoxTitle}>Pro Tip</Text>
-                      </View>
-                      <Text style={styles.tipsBoxText}>
-                        {analysisResult.ai_solution.tips[0] || "Regular monitoring is key to healthy crops."}
-                      </Text>
-                    </View>
+              {/* DETAILS & AI SOLUTION */}
+              <View style={styles.detailsCard}>
+                <View style={[styles.detailRow, { borderBottomWidth: 1, borderBottomColor: '#F0F0F0', paddingBottom: 12 }]}>
+                  <Text style={styles.sectionHeader}>Diagnosis Report</Text>
+                  <View style={styles.aiTag}>
+                    <Sparkles size={12} color="#F59E0B" />
+                    <Text style={styles.aiTagText}>AI Generated</Text>
                   </View>
-                </Animated.View>
-              )}
+                </View>
 
-            </View>
+                {/* Treatment / Advice */}
+                <View style={styles.adviceSection}>
+                  {analysisResult.ai_solution ? (
+                    <>
+                      <Text style={styles.adviceLabel}>🔬 Treatment Plan:</Text>
+                      <Text style={styles.adviceText}>{analysisResult.ai_solution.treatment}</Text>
+
+                      {analysisResult.ai_solution.prevention.length > 0 && (
+                        <View style={{ marginTop: 12 }}>
+                          <Text style={styles.adviceLabel}>🛡️ Prevention:</Text>
+                          {analysisResult.ai_solution.prevention.map((tip, idx) => (
+                            <View key={idx} style={styles.checkListItem}>
+                              <CheckCircle size={14} color="#4CAF50" style={{ marginTop: 2 }} />
+                              <Text style={styles.listText}>{tip}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+
+                      <View style={styles.tipsBox}>
+                        <Text style={styles.tipsBoxTitle}>💡 Quick Tip</Text>
+                        <Text style={styles.tipsBoxText}>
+                          {analysisResult.ai_solution.tips[0] || "Regular monitoring is key to healthy crops."}
+                        </Text>
+                      </View>
+                    </>
+                  ) : (
+                    <Text style={styles.adviceText}>{analysisResult.disease_detection.details || "No specific advice available."}</Text>
+                  )}
+                </View>
+              </View>
+
+            </Animated.View>
           )}
 
         </ScrollView>
@@ -495,29 +448,28 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   backIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 2,
+    elevation: 2,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: '#1B5E20',
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: 13,
-    color: '#2E7D32',
-    fontWeight: '600',
-    opacity: 0.8,
+    fontSize: 12,
+    color: '#43A047',
+    fontWeight: '500',
   },
   scrollContent: {
     padding: 20,
@@ -527,22 +479,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderRadius: 24,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
     overflow: 'hidden',
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
+    marginBottom: 20,
   },
   imageContainer: {
-    height: 340,
-    backgroundColor: '#FAFAFA',
+    height: 320,
+    backgroundColor: '#F5F5F5',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    overflow: 'hidden',
   },
   previewImage: {
     width: '100%',
@@ -550,66 +499,43 @@ const styles = StyleSheet.create({
   },
   overlayContainer: {
     ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
     zIndex: 10,
   },
-  gridOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'transparent',
-    // In a real app, use an ImageBackground with a grid png pattern
-    // or keep it subtle
-  },
-  laserLine: {
-    width: '100%',
-    height: 3,
-    backgroundColor: '#4CAF50',
-    shadowColor: "#4CAF50",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 5,
-    zIndex: 20,
-  },
-  stepsWrapper: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  stepsBlur: {
-    ...StyleSheet.absoluteFillObject,
-  },
   stepsContainer: {
-    padding: 15,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    width: '80%',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 16,
+    padding: 20,
   },
   stepRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   stepIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#333',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   stepIconActive: {
     backgroundColor: '#4CAF50',
     shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
-    shadowRadius: 5,
+    shadowRadius: 8,
   },
   stepIconCompleted: {
     backgroundColor: '#4CAF50',
   },
   stepText: {
     color: '#EEE',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
   },
   stepTextActive: {
@@ -620,37 +546,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scanIconCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: '#F1F8E9',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 15,
     borderWidth: 1,
     borderColor: '#C8E6C9',
-    shadowColor: "#4CAF50",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
   },
   placeholderTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1B5E20',
-    marginBottom: 6,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 5,
   },
   placeholderSubtitle: {
     fontSize: 14,
-    color: '#66BB6A',
-    fontWeight: '500',
+    color: '#81C784',
   },
   actionsBar: {
     flexDirection: 'row',
-    padding: 16,
-    gap: 16,
+    padding: 15,
+    gap: 15,
     borderTopWidth: 1,
-    borderTopColor: '#F5F5F5',
+    borderTopColor: '#F0F0F0',
     backgroundColor: '#FFF',
   },
   actionBtn: {
@@ -659,22 +580,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
-    borderRadius: 14,
+    borderRadius: 12,
     gap: 8,
   },
   galleryBtn: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F1F8E9',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#C8E6C9',
   },
   galleryBtnText: {
-    color: '#374151',
+    color: '#2E7D32',
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: 14,
   },
   cameraBtn: {
-    backgroundColor: '#1B5E20',
-    shadowColor: "#1B5E20",
+    backgroundColor: '#2E7D32',
+    shadowColor: "#2E7D32",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -683,133 +604,135 @@ const styles = StyleSheet.create({
   cameraBtnText: {
     color: '#FFF',
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: 14,
   },
   disabledBtn: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
   resultsSection: {
-    gap: 16,
+    gap: 15,
   },
   statusCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    borderRadius: 20,
+    padding: 16,
+    borderRadius: 16,
     borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  statusSuccess: {
-    borderColor: '#C8E6C9',
-  },
-  statusDanger: {
-    borderColor: '#FECACA',
-  },
-  statusIconContainer: {
-    marginRight: 16,
-    padding: 12,
-    backgroundColor: '#FFF',
-    borderRadius: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 5,
+    elevation: 2,
+    backgroundColor: '#FFF',
+  },
+  statusSuccess: {
+    borderColor: '#C8E6C9',
+    backgroundColor: '#F1F8E9',
+  },
+  statusDanger: {
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  statusIconContainer: {
+    marginRight: 15,
+    padding: 10,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
   },
   statusTextContainer: {
     flex: 1,
   },
   statusTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
     color: '#1F2937',
     marginBottom: 4,
   },
   statusSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6B7280',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   detailsCard: {
     backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 22,
+    borderRadius: 16,
+    padding: 20,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowRadius: 5,
     elevation: 2,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    marginBottom: 15,
   },
   sectionHeader: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: '#374151',
   },
   aiTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFEB',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 100,
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#FDE68A',
-    gap: 5,
+    gap: 4,
   },
   aiTagText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#B45309',
+    color: '#D97706',
+  },
+  adviceSection: {
+    gap: 10,
+  },
+  adviceLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4B5563',
+    marginBottom: 4,
   },
   adviceText: {
     fontSize: 15,
-    color: '#4B5563',
-    lineHeight: 24,
+    color: '#374151',
+    lineHeight: 22,
   },
   checkListItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 12,
-    gap: 12,
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 12,
+    marginBottom: 8,
+    gap: 8,
   },
   listText: {
     flex: 1,
     fontSize: 14,
-    color: '#374151',
+    color: '#4B5563',
     lineHeight: 20,
-    fontWeight: '500',
   },
   tipsBox: {
-    marginTop: 8,
+    marginTop: 15,
     backgroundColor: '#EFF6FF',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
+    padding: 15,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#3B82F6',
   },
   tipsBoxTitle: {
     fontSize: 13,
-    fontWeight: '800',
-    color: '#1E40AF',
+    fontWeight: '700',
+    color: '#1D4ED8',
+    marginBottom: 4,
   },
   tipsBoxText: {
     fontSize: 13,
     color: '#1E3A8A',
-    lineHeight: 18,
+    fontStyle: 'italic',
   },
 });
