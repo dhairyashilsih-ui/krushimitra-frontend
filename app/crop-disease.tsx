@@ -30,9 +30,12 @@ import {
   Sparkles,
   Scan,
   Bug,
+  Search,
+  BrainCircuit,
+  Microscope,
   Check
 } from 'lucide-react-native';
-import { BlurView } from 'expo-blur';
+import { BlurView } from 'expo-blur'; // Ensure you have this or use a fallback view
 
 const { width, height } = Dimensions.get('window');
 
@@ -72,8 +75,8 @@ interface AnalysisResult {
 const ANALYSIS_STEPS = [
   { id: 1, label: 'Identifying Crop (PlantNet)', icon: Leaf },
   { id: 2, label: 'Scanning Leaves (YOLOvm)', icon: Scan },
-  { id: 3, label: 'Analyzing Disease (MobileNet)', icon: Bug },
-  { id: 4, label: 'Consulting AI Expert (LLM)', icon: Sparkles },
+  { id: 3, label: 'Analyzing Disease (MobileNet)', icon: Microscope },
+  { id: 4, label: 'Consulting AI Expert (LLM)', icon: BrainCircuit },
 ];
 
 export default function CropDiseaseDetectionScreen() {
@@ -82,7 +85,7 @@ export default function CropDiseaseDetectionScreen() {
 
   // State
   const [isScanning, setIsScanning] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(0); // 0 = idle, 1..4 = steps, 5 = done
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
 
@@ -207,12 +210,17 @@ export default function CropDiseaseDetectionScreen() {
         'https://krushimitra2-0-backend.onrender.com';
 
       const formData = new FormData();
-      // @ts-ignore
-      formData.append('file', {
-        uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
-        name: 'photo.jpg',
-        type: 'image/jpeg',
-      });
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append('file', blob, 'photo.jpg');
+      } else {
+        formData.append('file', {
+          uri: uri,
+          name: 'photo.jpg',
+          type: 'image/jpeg',
+        } as any);
+      }
       formData.append('organ', 'leaf');
 
       const res = await fetch(`${apiUrl}/predict`, {
@@ -251,7 +259,7 @@ export default function CropDiseaseDetectionScreen() {
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
-          aspect: [4, 3], // User requested 4:3
+          aspect: [1, 1], // Square aspect for better model input
           quality: 0.8,
         });
       } else {
@@ -263,7 +271,7 @@ export default function CropDiseaseDetectionScreen() {
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
-          aspect: [4, 3], // User requested 4:3
+          aspect: [1, 1],
           quality: 0.8,
         });
       }
@@ -347,7 +355,7 @@ export default function CropDiseaseDetectionScreen() {
                                   {isCompleted ? (
                                     <Check size={12} color="#FFF" />
                                   ) : (
-                                    <step.icon size={12} color={isActive ? "#FFF" : "#CCC"} />
+                                    <step.icon size={12} color={isActive ?= "#FFF" : "#CCC"} />
                                   )}
                                 </View>
                                 <Text style={[styles.stepText, isActive && styles.stepTextActive]}>
@@ -547,6 +555,8 @@ const styles = StyleSheet.create({
   gridOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'transparent',
+    // In a real app, use an ImageBackground with a grid png pattern
+    // or keep it subtle
   },
   laserLine: {
     width: '100%',
