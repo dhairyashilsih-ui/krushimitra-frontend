@@ -355,7 +355,7 @@ export default function CropDiseaseDetectionScreen() {
                                   {isCompleted ? (
                                     <Check size={12} color="#FFF" />
                                   ) : (
-                                    <step.icon size={12} color={isActive ?= "#FFF" : "#CCC"} />
+                                    <step.icon size={12} color={isActive ? "#FFF" : "#CCC"} />
                                   )}
                                 </View>
                                 <Text style={[styles.stepText, isActive && styles.stepTextActive]}>
