@@ -12,7 +12,8 @@ import {
   Image,
   Dimensions,
   Easing,
-  ActivityIndicator
+  ActivityIndicator,
+  StatusBar
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
@@ -23,24 +24,19 @@ import {
   Upload,
   Camera,
   Leaf,
-  Eye,
-  Sun,
-  Focus,
-  AlertCircle,
   CheckCircle,
   Zap,
   Shield,
-  Activity,
   Sparkles,
-  Save,
-  Share2,
   Scan,
-  Bug
+  Bug,
+  Check
 } from 'lucide-react-native';
+import { BlurView } from 'expo-blur';
 
 const { width, height } = Dimensions.get('window');
 
-// API Response Interfaces
+// --- Types ---
 interface PlantIdentification {
   success: boolean;
   plant_scientific: string;
@@ -73,20 +69,38 @@ interface AnalysisResult {
   crop?: string;
 }
 
+const ANALYSIS_STEPS = [
+  { id: 1, label: 'Identifying Crop (PlantNet)', icon: Leaf },
+  { id: 2, label: 'Scanning Leaves (YOLOvm)', icon: Scan },
+  { id: 3, label: 'Analyzing Disease (MobileNet)', icon: Bug },
+  { id: 4, label: 'Consulting AI Expert (LLM)', icon: Sparkles },
+];
+
 export default function CropDiseaseDetectionScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+
+  // State
   const [isScanning, setIsScanning] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
 
   // Animation refs
   const fadeAnimation = useRef(new Animated.Value(0)).current;
-  const scaleAnimation = useRef(new Animated.Value(0.9)).current;
+  const scaleAnimation = useRef(new Animated.Value(0.95)).current;
   const pulseAnimation = useRef(new Animated.Value(1)).current;
 
+  // New: Scanner Animation (0 -> 1 loop)
+  const scannerAnim = useRef(new Animated.Value(0)).current;
+
+  // New: Result Stagger Animation
+  const resultCardAnim = useRef(new Animated.Value(0)).current;
+  const analysisDetailsAnim = useRef(new Animated.Value(0)).current;
+  const treatmentAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    // Entrance animations
+    // Intro Animation
     Animated.parallel([
       Animated.timing(fadeAnimation, {
         toValue: 1,
@@ -95,27 +109,85 @@ export default function CropDiseaseDetectionScreen() {
       }),
       Animated.timing(scaleAnimation, {
         toValue: 1,
-        duration: 600,
+        duration: 800,
+        easing: Easing.out(Easing.back(1.5)),
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Pulse effect
+    // Pulse effect for placeholder
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnimation, {
           toValue: 1.05,
-          duration: 2000,
+          duration: 1500,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnimation, {
           toValue: 1,
-          duration: 2000,
+          duration: 1500,
           useNativeDriver: true,
         }),
       ])
     ).start();
   }, []);
+
+  // Scanner Loop
+  useEffect(() => {
+    if (isScanning) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scannerAnim, {
+            toValue: 1,
+            duration: 2000,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scannerAnim, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true
+          })
+        ])
+      ).start();
+    } else {
+      scannerAnim.setValue(0);
+    }
+  }, [isScanning]);
+
+  // Simulate Steps Progression
+  useEffect(() => {
+    if (isScanning) {
+      setCurrentStep(1);
+      const step1 = setTimeout(() => setCurrentStep(2), 1500);
+      const step2 = setTimeout(() => setCurrentStep(3), 3000);
+      const step3 = setTimeout(() => setCurrentStep(4), 4500);
+
+      return () => {
+        clearTimeout(step1);
+        clearTimeout(step2);
+        clearTimeout(step3);
+      };
+    } else {
+      // Results Reveal Sequence
+      if (analysisResult) {
+        setCurrentStep(5); // Done
+
+        // Staggered Entrance
+        Animated.stagger(200, [
+          Animated.spring(resultCardAnim, { toValue: 1, useNativeDriver: true, friction: 8 }),
+          Animated.spring(analysisDetailsAnim, { toValue: 1, useNativeDriver: true, friction: 8 }),
+          Animated.spring(treatmentAnim, { toValue: 1, useNativeDriver: true, friction: 8 }),
+        ]).start();
+
+      } else {
+        setCurrentStep(0);
+        resultCardAnim.setValue(0);
+        analysisDetailsAnim.setValue(0);
+        treatmentAnim.setValue(0);
+      }
+    }
+  }, [isScanning, analysisResult]);
 
   const handleBack = () => {
     router.back();
@@ -125,38 +197,44 @@ export default function CropDiseaseDetectionScreen() {
     try {
       setIsScanning(true);
       setAnalysisResult(null);
+      // Reset animations
+      resultCardAnim.setValue(0);
+      analysisDetailsAnim.setValue(0);
+      treatmentAnim.setValue(0);
 
-      const apiUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const apiUrl =
+        process.env.EXPO_PUBLIC_BACKEND_URL ||
+        'https://krushimitra2-0-backend.onrender.com';
 
       const formData = new FormData();
-      // @ts-ignore - ReactNative FormData expects 'uri', 'name', 'type'
+      // @ts-ignore
       formData.append('file', {
         uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
         name: 'photo.jpg',
         type: 'image/jpeg',
       });
-      formData.append('organ', 'leaf'); // Default to leaf as requested
+      formData.append('organ', 'leaf');
 
-      const response = await fetch(`${apiUrl}/predict`, {
+      const res = await fetch(`${apiUrl}/predict`, {
         method: 'POST',
-
         body: formData,
       });
 
-      const data = await response.json();
-      console.log("Analysis Result:", data);
+      const data = await res.json();
+      console.log('Analysis Result:', data);
 
-      if (data.success) {
-        setAnalysisResult(data);
-      } else {
-        Alert.alert('Analysis Failed', data.message || 'Could not analyze image.');
-        setAnalysisResult(null); // Clear result on failure
-      }
+      setTimeout(() => {
+        if (data.success) {
+          setAnalysisResult(data);
+        } else {
+          Alert.alert('Analysis Failed', data.message || 'Could not analyze image.');
+        }
+        setIsScanning(false);
+      }, 500);
 
-    } catch (error) {
-      console.error('Upload Error:', error);
+    } catch (err) {
+      console.error('Upload Error:', err);
       Alert.alert('Error', 'Failed to connect to the server.');
-    } finally {
       setIsScanning(false);
     }
   };
@@ -173,7 +251,7 @@ export default function CropDiseaseDetectionScreen() {
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
-          aspect: [4, 3],
+          aspect: [4, 3], // User requested 4:3
           quality: 0.8,
         });
       } else {
@@ -185,7 +263,7 @@ export default function CropDiseaseDetectionScreen() {
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
-          aspect: [4, 3],
+          aspect: [4, 3], // User requested 4:3
           quality: 0.8,
         });
       }
@@ -201,208 +279,187 @@ export default function CropDiseaseDetectionScreen() {
     }
   };
 
-  const getConfidenceColor = (score: number) => {
-    if (score >= 0.8) return '#4CAF50'; // High - Green
-    if (score >= 0.5) return '#F59E0B'; // Medium - Orange
-    return '#EF4444'; // Low - Red
-  };
+  const hasDisease = analysisResult?.disease_detection.disease !== 'Healthy';
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <LinearGradient
-        colors={['#FFFFFF', '#F1F8E9', '#E8F5E8']}
+        colors={['#FFFFFF', '#F0F7F7', '#E0F2F1']}
         style={styles.backgroundGradient}
       >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <ArrowLeft size={24} color="#4CAF50" />
+            <View style={styles.backIconCircle}>
+              <ArrowLeft size={20} color="#1B5E20" />
+            </View>
           </TouchableOpacity>
           <View>
             <Text style={styles.headerTitle}>Crop Doctor</Text>
-            <Text style={styles.headerSubtitle}>AI Disease Detection</Text>
-          </View>
-          <View style={styles.aiBadge}>
-            <Sparkles size={16} color="#FFD700" />
-            <Text style={styles.aiBadgeText}>AI</Text>
+            <Text style={styles.headerSubtitle}>AI-Powered Diagnostic</Text>
           </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-          {/* Main Card */}
+          {/* Main Image Card */}
           <Animated.View style={[styles.mainCard, { opacity: fadeAnimation, transform: [{ scale: scaleAnimation }] }]}>
-            <LinearGradient colors={['#FFFFFF', '#F8FAFC']} style={styles.mainCardGradient}>
+            <View style={styles.imageContainer}>
+              {selectedImage ? (
+                <>
+                  <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="cover" />
 
-              {/* Image Preview Area */}
-              <View style={styles.illustrationContainer}>
-                {selectedImage ? (
-                  <View style={styles.imageWrapper}>
-                    <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="cover" />
-                    {isScanning && (
-                      <View style={styles.scanningOverlay}>
-                        <ActivityIndicator size="large" color="#4CAF50" />
-                        <Text style={styles.scanningText}>Analyzing Crop...</Text>
+                  {/* SCANNER OVERLAY */}
+                  {isScanning && (
+                    <View style={styles.overlayContainer}>
+                      {/* Grid Background */}
+                      <View style={styles.gridOverlay} />
+
+                      {/* Moving Laser */}
+                      <Animated.View style={[
+                        styles.laserLine,
+                        {
+                          transform: [{
+                            translateY: scannerAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0, 320] // Height of image container
+                            })
+                          }]
+                        }
+                      ]} />
+
+                      {/* Steps */}
+                      <View style={styles.stepsWrapper}>
+                        <BlurView intensity={40} tint="dark" style={styles.stepsBlur} />
+                        <View style={styles.stepsContainer}>
+                          {ANALYSIS_STEPS.map((step) => {
+                            const isActive = currentStep === step.id;
+                            const isCompleted = currentStep > step.id;
+                            const isPending = currentStep < step.id;
+
+                            return (
+                              <View key={step.id} style={[styles.stepRow, { opacity: isPending ? 0.4 : 1 }]}>
+                                <View style={[styles.stepIcon,
+                                isActive && styles.stepIconActive,
+                                isCompleted && styles.stepIconCompleted
+                                ]}>
+                                  {isCompleted ? (
+                                    <Check size={12} color="#FFF" />
+                                  ) : (
+                                    <step.icon size={12} color={isActive ? "#FFF" : "#CCC"} />
+                                  )}
+                                </View>
+                                <Text style={[styles.stepText, isActive && styles.stepTextActive]}>
+                                  {step.label}
+                                </Text>
+                                {isActive && <ActivityIndicator size="small" color="#4CAF50" style={{ marginLeft: 'auto' }} />}
+                              </View>
+                            )
+                          })}
+                        </View>
                       </View>
-                    )}
+                    </View>
+                  )}
+                </>
+              ) : (
+                <Animated.View style={[styles.placeholderContent, { transform: [{ scale: pulseAnimation }] }]}>
+                  <View style={styles.scanIconCircle}>
+                    <Scan size={40} color="#4CAF50" />
                   </View>
-                ) : (
-                  <Animated.View style={[styles.placeholderContainer, { transform: [{ scale: pulseAnimation }] }]}>
-                    <Scan size={60} color="#4CAF50" />
-                    <Text style={styles.placeholderText}>Upload specific crop leaf/fruit</Text>
-                  </Animated.View>
-                )}
-              </View>
+                  <Text style={styles.placeholderTitle}>Start Diagnosis</Text>
+                  <Text style={styles.placeholderSubtitle}>Upload a clear photo of the leaf</Text>
+                </Animated.View>
+              )}
+            </View>
 
-              {/* Action Buttons */}
-              <View style={styles.actionsContainer}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.galleryButton]}
-                  onPress={() => pickImage(false)}
-                  disabled={isScanning}
-                >
-                  <Upload size={24} color="#FFF" />
-                  <Text style={styles.actionButtonText}>Upload Image</Text>
-                </TouchableOpacity>
+            {/* Action Buttons */}
+            <View style={styles.actionsBar}>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.galleryBtn, isScanning && styles.disabledBtn]}
+                onPress={() => pickImage(false)}
+                disabled={isScanning}
+              >
+                <Upload size={20} color="#1B5E20" />
+                <Text style={styles.galleryBtnText}>Gallery</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.cameraButton]}
-                  onPress={() => pickImage(true)}
-                  disabled={isScanning}
-                >
-                  <Camera size={24} color="#4CAF50" />
-                  <Text style={styles.cameraButtonText}>Take Photo</Text>
-                </TouchableOpacity>
-              </View>
-
-            </LinearGradient>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.cameraBtn, isScanning && styles.disabledBtn]}
+                onPress={() => pickImage(true)}
+                disabled={isScanning}
+              >
+                <Camera size={20} color="#FFF" />
+                <Text style={styles.cameraBtnText}>Take Photo</Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
 
-          {/* Results Section */}
+          {/* Results Section - SEQUENTIAL REVEAL */}
           {analysisResult && (
-            <Animated.View style={[styles.resultsContainer, { opacity: fadeAnimation }]}>
+            <View style={styles.resultsSection}>
 
-              {/* Crop Information */}
-              {analysisResult.crop && (
-                <View style={styles.resultCard}>
-                  <View style={styles.sectionHeader}>
-                    <Leaf size={20} color="#4CAF50" />
-                    <Text style={styles.sectionTitle}>Crop Information</Text>
+              {/* 1. STATUS HEADER */}
+              <Animated.View style={{ opacity: resultCardAnim, transform: [{ translateY: resultCardAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+                <LinearGradient
+                  colors={hasDisease ? ['#FEF2F2', '#FFF5F5'] : ['#F1F8E9', '#F0FDF4']}
+                  style={[styles.statusCard, hasDisease ? styles.statusDanger : styles.statusSuccess]}
+                >
+                  <View style={styles.statusIconContainer}>
+                    {hasDisease ? <Bug size={24} color="#EF4444" /> : <Shield size={24} color="#4CAF50" />}
                   </View>
-                  <View style={styles.resultRow}>
-                    <Text style={styles.label}>Detected Crop:</Text>
-                    <Text style={styles.value}>{analysisResult.crop}</Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Plant Identification Result */}
-              <View style={styles.resultCard}>
-                <View style={styles.sectionHeader}>
-                  <Leaf size={20} color="#4CAF50" />
-                  <Text style={styles.sectionTitle}>Plant Identification</Text>
-                </View>
-
-                <View style={styles.resultRow}>
-                  <Text style={styles.label}>Common Name:</Text>
-                  <Text style={styles.value}>{analysisResult.plant_identification.plant_common}</Text>
-                </View>
-                <View style={styles.resultRow}>
-                  <Text style={styles.label}>Scientific:</Text>
-                  <Text style={[styles.value, styles.italic]}>{analysisResult.plant_identification.plant_scientific}</Text>
-                </View>
-                <View style={styles.resultRow}>
-                  <Text style={styles.label}>Confidence:</Text>
-                  <Text style={[styles.value, { color: getConfidenceColor(analysisResult.plant_identification.confidence) }]}>
-                    {(analysisResult.plant_identification.confidence * 100).toFixed(1)}%
-                  </Text>
-                </View>
-                <View style={styles.sourceTag}>
-                  <Text style={styles.sourceText}>Source: {analysisResult.plant_identification.source}</Text>
-                </View>
-              </View>
-
-              {/* Disease Analysis Result */}
-              <View style={styles.resultCard}>
-                <View style={styles.sectionHeader}>
-                  <Bug size={20} color={analysisResult.disease_detection.disease === 'Healthy' ? '#4CAF50' : '#EF4444'} />
-                  <Text style={styles.sectionTitle}>Disease Analysis</Text>
-                </View>
-
-                <View style={styles.resultRow}>
-                  <Text style={styles.label}>Status:</Text>
-                  <Text style={[
-                    styles.value,
-                    {
-                      color: analysisResult.disease_detection.disease === 'Healthy' ? '#4CAF50' : '#EF4444',
-                      fontWeight: 'bold'
-                    }
-                  ]}>
-                    {analysisResult.disease_detection.disease}
-                  </Text>
-                </View>
-
-                {analysisResult.disease_detection.severity && (
-                  <View style={styles.resultRow}>
-                    <Text style={styles.label}>Severity:</Text>
-                    <Text style={[styles.value,
-                    analysisResult.disease_detection.severity === 'High' ? { color: '#EF4444' } :
-                      analysisResult.disease_detection.severity === 'Medium' ? { color: '#F59E0B' } :
-                        { color: '#4CAF50' }
-                    ]}>
-                      {analysisResult.disease_detection.severity}
+                  <View style={styles.statusTextContainer}>
+                    <Text style={styles.statusTitle}>
+                      {analysisResult.disease_detection.disease}
+                    </Text>
+                    <Text style={styles.statusSubtitle}>
+                      {analysisResult.plant_identification.plant_common} • {(analysisResult.disease_detection.confidence * 100).toFixed(0)}% Confidence
                     </Text>
                   </View>
-                )}
+                </LinearGradient>
+              </Animated.View>
 
-                <View style={styles.resultRow}>
-                  <Text style={styles.label}>Confidence:</Text>
-                  <Text style={[styles.value, { color: getConfidenceColor(analysisResult.disease_detection.confidence) }]}>
-                    {(analysisResult.disease_detection.confidence * 100).toFixed(1)}%
-                  </Text>
-                </View>
-
-                {analysisResult.disease_detection.details && (
-                  <Text style={styles.detailsText}>{analysisResult.disease_detection.details}</Text>
-                )}
-              </View>
-
-              {/* Treatment / Recommendations */}
-              {analysisResult.disease_detection.disease !== 'Healthy' && (
-                <View style={styles.resultCard}>
-                  <View style={styles.sectionHeader}>
-                    <Shield size={20} color="#F59E0B" />
-                    <Text style={styles.sectionTitle}>Recommendations</Text>
+              {/* 2. DIAGNOSIS DETAILS */}
+              <Animated.View style={{ opacity: analysisDetailsAnim, transform: [{ translateY: analysisDetailsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+                <View style={[styles.detailsCard, { borderLeftColor: hasDisease ? '#EF4444' : '#4CAF50', borderLeftWidth: 4 }]}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.sectionHeader}>Diagnosis Report</Text>
+                    <View style={styles.aiTag}>
+                      <Sparkles size={12} color="#F59E0B" />
+                      <Text style={styles.aiTagText}>AI Analysis</Text>
+                    </View>
                   </View>
+                  <Text style={styles.adviceText}>{analysisResult.ai_solution?.treatment || analysisResult.disease_detection.details}</Text>
+                </View>
+              </Animated.View>
 
-                  {/* Display AI advice if available */}
-                  {analysisResult.disease_detection.advice ? (
-                    <Text style={styles.recommendationText}>
-                      {analysisResult.disease_detection.advice}
-                    </Text>
-                  ) : analysisResult.ai_solution ? (
-                    <>
-                      <Text style={styles.recommendationText}>
-                        {analysisResult.ai_solution.treatment}
+              {/* 3. TREATMENT & PREVENTION */}
+              {analysisResult.ai_solution && (
+                <Animated.View style={{ opacity: treatmentAnim, transform: [{ translateY: treatmentAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+                  <View style={styles.detailsCard}>
+                    <Text style={[styles.sectionHeader, { marginBottom: 15 }]}>Recommended Action</Text>
+
+                    {analysisResult.ai_solution.prevention.map((tip, idx) => (
+                      <View key={idx} style={styles.checkListItem}>
+                        <CheckCircle size={16} color="#4CAF50" style={{ marginTop: 2 }} />
+                        <Text style={styles.listText}>{tip}</Text>
+                      </View>
+                    ))}
+
+                    <View style={styles.tipsBox}>
+                      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
+                        <Zap size={14} color="#1D4ED8" />
+                        <Text style={styles.tipsBoxTitle}>Pro Tip</Text>
+                      </View>
+                      <Text style={styles.tipsBoxText}>
+                        {analysisResult.ai_solution.tips[0] || "Regular monitoring is key to healthy crops."}
                       </Text>
-                      {analysisResult.ai_solution.prevention && analysisResult.ai_solution.prevention.length > 0 && (
-                        <View style={{ marginTop: 8 }}>
-                          <Text style={[styles.label, { marginBottom: 4 }]}>Prevention:</Text>
-                          {analysisResult.ai_solution.prevention.map((tip, i) => (
-                            <Text key={i} style={styles.detailsText}>• {tip}</Text>
-                          ))}
-                        </View>
-                      )}
-                    </>
-                  ) : (
-                    <Text style={styles.recommendationText}>
-                      Consult local agri-expert for specific advice.
-                    </Text>
-                  )}
-                </View>
+                    </View>
+                  </View>
+                </Animated.View>
               )}
 
-            </Animated.View>
+            </View>
           )}
 
         </ScrollView>
@@ -414,7 +471,7 @@ export default function CropDiseaseDetectionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F1F8E9',
+    backgroundColor: '#F8FAFC',
   },
   backgroundGradient: {
     flex: 1,
@@ -422,195 +479,327 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    paddingTop: Platform.OS === 'android' ? 40 : 20,
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    paddingTop: Platform.OS === 'android' ? 45 : 15,
   },
   backButton: {
     marginRight: 15,
   },
+  backIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   headerTitle: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#1B5E20',
+    letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#4CAF50',
-  },
-  aiBadge: {
-    marginLeft: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  aiBadgeText: {
-    marginLeft: 5,
+    fontSize: 13,
     color: '#2E7D32',
-    fontWeight: 'bold',
-    fontSize: 12,
+    fontWeight: '600',
+    opacity: 0.8,
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 50,
   },
   mainCard: {
-    borderRadius: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowRadius: 20,
+    elevation: 8,
+    overflow: 'hidden',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  mainCardGradient: {
-    padding: 20,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  illustrationContainer: {
-    width: '100%',
-    height: 250,
-    backgroundColor: '#F1F8E9',
-    borderRadius: 15,
+  imageContainer: {
+    height: 340,
+    backgroundColor: '#FAFAFA',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    position: 'relative',
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#C8E6C9',
-  },
-  imageWrapper: {
-    width: '100%',
-    height: '100%',
   },
   previewImage: {
     width: '100%',
     height: '100%',
   },
-  scanningOverlay: {
+  overlayContainer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    zIndex: 10,
   },
-  scanningText: {
-    marginTop: 10,
-    color: '#2E7D32',
-    fontWeight: 'bold',
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
   },
-  placeholderContainer: {
-    alignItems: 'center',
-  },
-  placeholderText: {
-    marginTop: 10,
-    color: '#66BB6A',
-    fontSize: 16,
-  },
-  actionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  laserLine: {
     width: '100%',
-    gap: 15,
+    height: 3,
+    backgroundColor: '#4CAF50',
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 5,
+    zIndex: 20,
   },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
+  stepsWrapper: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  stepsBlur: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  stepsContainer: {
     padding: 15,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.7)',
   },
-  galleryButton: {
-    backgroundColor: '#2E7D32',
-  },
-  cameraButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#2E7D32',
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  cameraButtonText: {
-    color: '#2E7D32',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  resultsContainer: {
-    marginTop: 10,
-  },
-  resultCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  sectionHeader: {
+  stepRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-    paddingBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#374151',
-  },
-  resultRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     marginBottom: 10,
-    alignItems: 'center',
   },
-  label: {
-    fontSize: 16,
-    color: '#6B7280',
+  stepIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  stepIconActive: {
+    backgroundColor: '#4CAF50',
+    shadowColor: "#4CAF50",
+    shadowOpacity: 0.8,
+    shadowRadius: 5,
+  },
+  stepIconCompleted: {
+    backgroundColor: '#4CAF50',
+  },
+  stepText: {
+    color: '#EEE',
+    fontSize: 13,
     fontWeight: '500',
   },
-  value: {
-    fontSize: 16,
-    color: '#111827',
+  stepTextActive: {
+    color: '#FFF',
     fontWeight: 'bold',
   },
-  italic: {
-    fontStyle: 'italic',
+  placeholderContent: {
+    alignItems: 'center',
   },
-  sourceTag: {
-    backgroundColor: '#E8F5E9',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginTop: 5,
+  scanIconCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#F1F8E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
   },
-  sourceText: {
-    fontSize: 12,
-    color: '#2E7D32',
+  placeholderTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1B5E20',
+    marginBottom: 6,
   },
-  detailsText: {
-    marginTop: 5,
-    color: '#4B5563',
-    lineHeight: 20,
+  placeholderSubtitle: {
+    fontSize: 14,
+    color: '#66BB6A',
+    fontWeight: '500',
   },
-  recommendationText: {
-    fontSize: 15,
+  actionsBar: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F5F5',
+    backgroundColor: '#FFF',
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
+  },
+  galleryBtn: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  galleryBtnText: {
     color: '#374151',
-    marginBottom: 8,
-    lineHeight: 22,
-  }
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  cameraBtn: {
+    backgroundColor: '#1B5E20',
+    shadowColor: "#1B5E20",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cameraBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  disabledBtn: {
+    opacity: 0.5,
+  },
+  resultsSection: {
+    gap: 16,
+  },
+  statusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  statusSuccess: {
+    borderColor: '#C8E6C9',
+  },
+  statusDanger: {
+    borderColor: '#FECACA',
+  },
+  statusIconContainer: {
+    marginRight: 16,
+    padding: 12,
+    backgroundColor: '#FFF',
+    borderRadius: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  statusTextContainer: {
+    flex: 1,
+  },
+  statusTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  statusSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  detailsCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 22,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  sectionHeader: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  aiTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFEB',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    gap: 5,
+  },
+  aiTagText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  adviceText: {
+    fontSize: 15,
+    color: '#4B5563',
+    lineHeight: 24,
+  },
+  checkListItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    gap: 12,
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 12,
+  },
+  listText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  tipsBox: {
+    marginTop: 8,
+    backgroundColor: '#EFF6FF',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  tipsBoxTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1E40AF',
+  },
+  tipsBoxText: {
+    fontSize: 13,
+    color: '#1E3A8A',
+    lineHeight: 18,
+  },
 });
