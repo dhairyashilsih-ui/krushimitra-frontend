@@ -13,7 +13,8 @@ import {
   Dimensions,
   Easing,
   ActivityIndicator,
-  StatusBar
+  StatusBar,
+  Vibration
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
@@ -33,9 +34,10 @@ import {
   Search,
   BrainCircuit,
   Microscope,
-  Check
+  Check,
+  Activity
 } from 'lucide-react-native';
-import { BlurView } from 'expo-blur'; // Ensure you have this or use a fallback view
+import { BlurView } from 'expo-blur';
 
 const { width, height } = Dimensions.get('window');
 
@@ -93,7 +95,14 @@ export default function CropDiseaseDetectionScreen() {
   const fadeAnimation = useRef(new Animated.Value(0)).current;
   const scaleAnimation = useRef(new Animated.Value(0.95)).current;
   const pulseAnimation = useRef(new Animated.Value(1)).current;
-  const resultFadeAnim = useRef(new Animated.Value(0)).current;
+
+  // New: Holographic Scanner
+  const scannerAnimation = useRef(new Animated.Value(0)).current;
+
+  // Results Animations (Sequential Reveal)
+  const resultHeaderAnim = useRef(new Animated.Value(0)).current;
+  const resultDetailsAnim = useRef(new Animated.Value(0)).current;
+  const resultActionAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Intro Animation
@@ -128,13 +137,35 @@ export default function CropDiseaseDetectionScreen() {
     ).start();
   }, []);
 
-  // Simulate Steps Progression
+  // Holographic Scanner Loop
+  useEffect(() => {
+    if (isScanning) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scannerAnimation, {
+            toValue: 1,
+            duration: 2000,
+            easing: Easing.linear,
+            useNativeDriver: true
+          }),
+          Animated.timing(scannerAnimation, {
+            toValue: 0,
+            duration: 2000,
+            easing: Easing.linear,
+            useNativeDriver: true
+          })
+        ])
+      ).start();
+    } else {
+      scannerAnimation.setValue(0);
+    }
+  }, [isScanning]);
+
+
+  // Simulate Steps Progression & Reveal Results
   useEffect(() => {
     if (isScanning) {
       setCurrentStep(1);
-      // We will manually advance steps roughly every 1-1.5 seconds 
-      // to simulate the pipeline visually while the backend works.
-      // The backend usually takes 4-6 seconds, so this fits well.
 
       const step1 = setTimeout(() => setCurrentStep(2), 1500);
       const step2 = setTimeout(() => setCurrentStep(3), 3000);
@@ -149,13 +180,34 @@ export default function CropDiseaseDetectionScreen() {
       // Reset or Finish
       if (analysisResult) {
         setCurrentStep(5); // Done
-        Animated.timing(resultFadeAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }).start();
+
+        // Sequential Reveal
+        Animated.stagger(200, [
+          Animated.timing(resultHeaderAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic)
+          }),
+          Animated.timing(resultDetailsAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic)
+          }),
+          Animated.timing(resultActionAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic)
+          })
+        ]).start();
+
       } else {
         setCurrentStep(0);
+        resultHeaderAnim.setValue(0);
+        resultDetailsAnim.setValue(0);
+        resultActionAnim.setValue(0);
       }
     }
   }, [isScanning, analysisResult]);
@@ -168,7 +220,11 @@ export default function CropDiseaseDetectionScreen() {
     try {
       setIsScanning(true);
       setAnalysisResult(null);
-      resultFadeAnim.setValue(0);
+
+      // Reset animations
+      resultHeaderAnim.setValue(0);
+      resultDetailsAnim.setValue(0);
+      resultActionAnim.setValue(0);
 
       const apiUrl =
         process.env.EXPO_PUBLIC_BACKEND_URL ||
@@ -199,15 +255,15 @@ export default function CropDiseaseDetectionScreen() {
       console.log('Analysis Result:', data);
 
       // Ensure animation has reached at least step 4 before showing result
-      // This prevents "instant" glitch if server is too fast (cached)
       setTimeout(() => {
         if (data.success) {
           setAnalysisResult(data);
+          Vibration.vibrate(100); // Haptic feedback on success
         } else {
           Alert.alert('Analysis Failed', data.message || 'Could not analyze image.');
         }
         setIsScanning(false);
-      }, 500); // minimal delay to let step 4 show briefly
+      }, 500);
 
     } catch (err) {
       console.error('Upload Error:', err);
@@ -256,47 +312,66 @@ export default function CropDiseaseDetectionScreen() {
     }
   };
 
-  const getConfidenceColor = (score: number) => {
-    if (score >= 0.8) return '#4CAF50'; // High - Green
-    if (score >= 0.5) return '#F59E0B'; // Medium - Orange
-    return '#EF4444'; // Low - Red
-  };
-
   const hasDisease = analysisResult?.disease_detection.disease !== 'Healthy';
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <LinearGradient
-        colors={['#FFFFFF', '#F0F7F0', '#E0F2F1']}
+        colors={['#FFFFFF', '#F1F8E9', '#E0F2F1']}
+        locations={[0, 0.5, 1]}
         style={styles.backgroundGradient}
       >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <View style={styles.backIconCircle}>
-              <ArrowLeft size={20} color="#1B5E20" />
-            </View>
+            <BlurView intensity={20} tint="light" style={styles.backIconCircle}>
+              <ArrowLeft size={22} color="#1B5E20" />
+            </BlurView>
           </TouchableOpacity>
           <View>
-            <Text style={styles.headerTitle}>Crop Doctor</Text>
-            <Text style={styles.headerSubtitle}>AI-Powered Diagnostic</Text>
+            <Text style={styles.headerTitle}>Crop Doctor AI</Text>
+            <Text style={styles.headerSubtitle}>Pro Diagnosis System</Text>
           </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-          {/* Main Image Card */}
+          {/* Main Image Card with Holographic Scanner */}
           <Animated.View style={[styles.mainCard, { opacity: fadeAnimation, transform: [{ scale: scaleAnimation }] }]}>
             <View style={styles.imageContainer}>
               {selectedImage ? (
                 <>
                   <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="cover" />
 
-                  {/* Analysis Overlay */}
+                  {/* Holographic Scanner Overlay */}
+                  {isScanning && (
+                    <Animated.View
+                      style={[
+                        styles.scannerLine,
+                        {
+                          transform: [{
+                            translateY: scannerAnimation.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0, 320] // Height of image container
+                            })
+                          }]
+                        }
+                      ]}
+                    >
+                      <LinearGradient
+                        colors={['rgba(76, 175, 80, 0)', 'rgba(76, 175, 80, 0.8)', 'rgba(76, 175, 80, 0)']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={{ flex: 1 }}
+                      />
+                    </Animated.View>
+                  )}
+
+                  {/* Analysis Steps Overlay (Glassmorphism) */}
                   {isScanning && (
                     <View style={styles.overlayContainer}>
-                      <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+                      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
                       <View style={styles.stepsContainer}>
                         {ANALYSIS_STEPS.map((step) => {
                           const isActive = currentStep === step.id;
@@ -304,7 +379,7 @@ export default function CropDiseaseDetectionScreen() {
                           const isPending = currentStep < step.id;
 
                           return (
-                            <View key={step.id} style={[styles.stepRow, { opacity: isPending ? 0.5 : 1 }]}>
+                            <View key={step.id} style={[styles.stepRow, { opacity: isPending ? 0.4 : 1 }]}>
                               <View style={[styles.stepIcon,
                               isActive && styles.stepIconActive,
                               isCompleted && styles.stepIconCompleted
@@ -329,10 +404,10 @@ export default function CropDiseaseDetectionScreen() {
               ) : (
                 <Animated.View style={[styles.placeholderContent, { transform: [{ scale: pulseAnimation }] }]}>
                   <View style={styles.scanIconCircle}>
-                    <Scan size={40} color="#4CAF50" />
+                    <Scan size={44} color="#2E7D32" />
                   </View>
                   <Text style={styles.placeholderTitle}>Start Diagnosis</Text>
-                  <Text style={styles.placeholderSubtitle}>Upload a clear photo of the leaf</Text>
+                  <Text style={styles.placeholderSubtitle}>Upload a clear leaf photo</Text>
                 </Animated.View>
               )}
             </View>
@@ -353,74 +428,94 @@ export default function CropDiseaseDetectionScreen() {
                 onPress={() => pickImage(true)}
                 disabled={isScanning}
               >
+                <LinearGradient
+                  colors={['#43A047', '#2E7D32']}
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
                 <Camera size={20} color="#FFF" />
                 <Text style={styles.cameraBtnText}>Take Photo</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
 
-          {/* Results Section */}
+          {/* Results Section (Sequential Reveal) */}
           {analysisResult && (
-            <Animated.View style={[styles.resultsSection, { opacity: resultFadeAnim, transform: [{ translateY: resultFadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
+            <View style={styles.resultsSection}>
 
-              {/* STATUS HEADER - Simplified & Clean */}
-              <View style={[styles.statusCard, hasDisease ? styles.statusDanger : styles.statusSuccess]}>
-                <View style={styles.statusIconContainer}>
-                  {hasDisease ? <Bug size={24} color="#EF4444" /> : <Shield size={24} color="#4CAF50" />}
-                </View>
-                <View style={styles.statusTextContainer}>
-                  <Text style={styles.statusTitle}>
-                    {analysisResult.disease_detection.disease}
-                  </Text>
-                  <Text style={styles.statusSubtitle}>
-                    {analysisResult.plant_identification.plant_common} • {(analysisResult.disease_detection.confidence * 100).toFixed(0)}% Confidence
-                  </Text>
-                </View>
-              </View>
+              {/* 1. STATUS HEADER */}
+              <Animated.View style={{ opacity: resultHeaderAnim, transform: [{ translateY: resultHeaderAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+                <LinearGradient
+                  colors={hasDisease ? ['#FEF2F2', '#FEE2E2'] : ['#F1F8E9', '#DCFCE7']}
+                  style={[styles.statusCard, hasDisease ? styles.statusDanger : styles.statusSuccess]}
+                >
+                  <View style={styles.statusIconContainer}>
+                    {hasDisease ? <Bug size={24} color="#EF4444" /> : <Sparkles size={24} color="#4CAF50" />}
+                  </View>
+                  <View style={styles.statusTextContainer}>
+                    <Text style={styles.statusTitle}>
+                      {analysisResult.disease_detection.disease}
+                    </Text>
+                    <Text style={styles.statusSubtitle}>
+                      {analysisResult.plant_identification.plant_common} • {(analysisResult.disease_detection.confidence * 100).toFixed(0)}% Confidence
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </Animated.View>
 
-              {/* DETAILS & AI SOLUTION */}
-              <View style={styles.detailsCard}>
-                <View style={[styles.detailRow, { borderBottomWidth: 1, borderBottomColor: '#F0F0F0', paddingBottom: 12 }]}>
-                  <Text style={styles.sectionHeader}>Diagnosis Report</Text>
-                  <View style={styles.aiTag}>
-                    <Sparkles size={12} color="#F59E0B" />
-                    <Text style={styles.aiTagText}>AI Generated</Text>
+              {/* 2. DETAILS & AI SOLUTION */}
+              <Animated.View style={{ opacity: resultDetailsAnim, transform: [{ translateY: resultDetailsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+                <View style={styles.detailsCard}>
+                  <View style={[styles.detailRow, { borderBottomWidth: 1, borderBottomColor: '#F0F0F0', paddingBottom: 12 }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Activity size={18} color="#3B82F6" />
+                      <Text style={styles.sectionHeader}>Diagnosis Report</Text>
+                    </View>
+                    <View style={styles.aiTag}>
+                      <BrainCircuit size={12} color="#D97706" />
+                      <Text style={styles.aiTagText}>AI Analysis</Text>
+                    </View>
+                  </View>
+
+                  {/* Treatment / Advice */}
+                  <View style={styles.adviceSection}>
+                    {analysisResult.ai_solution ? (
+                      <>
+                        <View style={styles.adviceBlock}>
+                          <Text style={styles.adviceLabel}>🔬 Treatment</Text>
+                          <Text style={styles.adviceText}>{analysisResult.ai_solution.treatment}</Text>
+                        </View>
+
+                        {analysisResult.ai_solution.prevention.length > 0 && (
+                          <View style={styles.adviceBlock}>
+                            <Text style={styles.adviceLabel}>🛡️ Prevention</Text>
+                            {analysisResult.ai_solution.prevention.map((tip, idx) => (
+                              <View key={idx} style={styles.checkListItem}>
+                                <CheckCircle size={14} color="#4CAF50" style={{ marginTop: 2 }} />
+                                <Text style={styles.listText}>{tip}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+
+                        <View style={styles.tipsBox}>
+                          <View style={styles.tipHeader}>
+                            <Zap size={14} color="#F59E0B" />
+                            <Text style={styles.tipsBoxTitle}>Pro Tip</Text>
+                          </View>
+                          <Text style={styles.tipsBoxText}>
+                            {analysisResult.ai_solution.tips[0] || "Regular monitoring is key to healthy crops."}
+                          </Text>
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={styles.adviceText}>{analysisResult.disease_detection.details || "No specific advice available."}</Text>
+                    )}
                   </View>
                 </View>
-
-                {/* Treatment / Advice */}
-                <View style={styles.adviceSection}>
-                  {analysisResult.ai_solution ? (
-                    <>
-                      <Text style={styles.adviceLabel}>🔬 Treatment Plan:</Text>
-                      <Text style={styles.adviceText}>{analysisResult.ai_solution.treatment}</Text>
-
-                      {analysisResult.ai_solution.prevention.length > 0 && (
-                        <View style={{ marginTop: 12 }}>
-                          <Text style={styles.adviceLabel}>🛡️ Prevention:</Text>
-                          {analysisResult.ai_solution.prevention.map((tip, idx) => (
-                            <View key={idx} style={styles.checkListItem}>
-                              <CheckCircle size={14} color="#4CAF50" style={{ marginTop: 2 }} />
-                              <Text style={styles.listText}>{tip}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-
-                      <View style={styles.tipsBox}>
-                        <Text style={styles.tipsBoxTitle}>💡 Quick Tip</Text>
-                        <Text style={styles.tipsBoxText}>
-                          {analysisResult.ai_solution.tips[0] || "Regular monitoring is key to healthy crops."}
-                        </Text>
-                      </View>
-                    </>
-                  ) : (
-                    <Text style={styles.adviceText}>{analysisResult.disease_detection.details || "No specific advice available."}</Text>
-                  )}
-                </View>
-              </View>
-
-            </Animated.View>
+              </Animated.View>
+            </View>
           )}
 
         </ScrollView>
@@ -448,28 +543,27 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   backIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFF',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.8)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    overflow: 'hidden'
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: '#1B5E20',
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#43A047',
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    opacity: 0.8
   },
   scrollContent: {
     padding: 20,
@@ -479,23 +573,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderRadius: 24,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
     overflow: 'hidden',
-    marginBottom: 20,
+    marginBottom: 25,
+    borderWidth: 1,
+    borderColor: '#FFF',
   },
   imageContainer: {
     height: 320,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    overflow: 'hidden',
   },
   previewImage: {
     width: '100%',
     height: '100%',
+  },
+  scannerLine: {
+    position: 'absolute',
+    top: -2,
+    left: 0,
+    right: 0,
+    height: 4,
+    zIndex: 20,
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    backgroundColor: '#4CAF50'
   },
   overlayContainer: {
     ...StyleSheet.absoluteFillObject,
@@ -504,43 +614,53 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   stepsContainer: {
-    width: '80%',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 16,
-    padding: 20,
+    width: '85%',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   stepRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   stepIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#333',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
   },
   stepIconActive: {
     backgroundColor: '#4CAF50',
     shadowColor: "#4CAF50",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
-    shadowRadius: 8,
+    shadowRadius: 10,
+    borderColor: '#81C784'
   },
   stepIconCompleted: {
     backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50'
   },
   stepText: {
-    color: '#EEE',
-    fontSize: 14,
+    color: '#E0E0E0',
+    fontSize: 15,
     fontWeight: '500',
+    letterSpacing: 0.3
   },
   stepTextActive: {
     color: '#FFF',
-    fontWeight: 'bold',
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2
   },
   placeholderContent: {
     alignItems: 'center',
@@ -549,29 +669,34 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F1F8E9',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#C8E6C9',
+    borderColor: '#DCFCE7',
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
   },
   placeholderTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2E7D32',
-    marginBottom: 5,
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1B5E20',
+    marginBottom: 8,
   },
   placeholderSubtitle: {
     fontSize: 14,
-    color: '#81C784',
+    color: '#66BB6A',
+    fontWeight: '500'
   },
   actionsBar: {
     flexDirection: 'row',
-    padding: 15,
+    padding: 20,
     gap: 15,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: '#F1F5F9',
     backgroundColor: '#FFF',
   },
   actionBtn: {
@@ -579,71 +704,75 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 16,
     gap: 8,
+    overflow: 'hidden',
+    position: 'relative'
   },
   galleryBtn: {
     backgroundColor: '#F1F8E9',
     borderWidth: 1,
-    borderColor: '#C8E6C9',
+    borderColor: '#DCFCE7',
   },
   galleryBtnText: {
-    color: '#2E7D32',
+    color: '#388E3C',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
   },
   cameraBtn: {
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#2E7D32', // Fallback
     shadowColor: "#2E7D32",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 10,
+    elevation: 6,
   },
   cameraBtnText: {
     color: '#FFF',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
+    zIndex: 1
   },
   disabledBtn: {
     opacity: 0.6,
   },
   resultsSection: {
-    gap: 15,
+    gap: 20,
   },
   statusCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
+    padding: 20,
+    borderRadius: 24,
     borderWidth: 1,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 5,
+    shadowRadius: 10,
     elevation: 2,
-    backgroundColor: '#FFF',
   },
   statusSuccess: {
-    borderColor: '#C8E6C9',
-    backgroundColor: '#F1F8E9',
+    borderColor: '#DCFCE7',
   },
   statusDanger: {
     borderColor: '#FECACA',
-    backgroundColor: '#FEF2F2',
   },
   statusIconContainer: {
     marginRight: 15,
-    padding: 10,
+    padding: 12,
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   statusTextContainer: {
     flex: 1,
   },
   statusTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#1F2937',
     marginBottom: 4,
@@ -651,88 +780,107 @@ const styles = StyleSheet.create({
   statusSubtitle: {
     fontSize: 13,
     color: '#6B7280',
-    fontWeight: '500',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
   },
   detailsCard: {
     backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    elevation: 4,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
   },
   sectionHeader: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#374151',
+    color: '#1F2937',
   },
   aiTag: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFBEB',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FDE68A',
-    gap: 4,
+    borderColor: '#FEF3C7',
+    gap: 6,
   },
   aiTagText: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '800',
     color: '#D97706',
+    letterSpacing: 0.5
   },
   adviceSection: {
-    gap: 10,
+    gap: 16,
+  },
+  adviceBlock: {
+    gap: 6
   },
   adviceLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#4B5563',
-    marginBottom: 4,
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
   },
   adviceText: {
-    fontSize: 15,
+    fontSize: 16,
     color: '#374151',
-    lineHeight: 22,
+    lineHeight: 24,
+    fontWeight: '400'
   },
   checkListItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 8,
-    gap: 8,
+    marginBottom: 10,
+    gap: 10,
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    borderRadius: 12
   },
   listText: {
     flex: 1,
     fontSize: 14,
     color: '#4B5563',
     lineHeight: 20,
+    fontWeight: '500'
   },
   tipsBox: {
-    marginTop: 15,
+    marginTop: 10,
     backgroundColor: '#EFF6FF',
-    padding: 15,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3B82F6',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DBEAFE'
+  },
+  tipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6
   },
   tipsBoxTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1D4ED8',
-    marginBottom: 4,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#2563EB',
+    textTransform: 'uppercase'
   },
   tipsBoxText: {
-    fontSize: 13,
-    color: '#1E3A8A',
+    fontSize: 14,
+    color: '#1E40AF',
     fontStyle: 'italic',
+    lineHeight: 20
   },
 });
