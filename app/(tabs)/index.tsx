@@ -354,7 +354,10 @@ export default function HomeScreen() {
         const recognition = new SpeechRecognition();
         recognition.continuous = false;
         recognition.interimResults = false;
-        recognition.lang = 'en-IN';
+        // Dynamic language selection based on user preference or i18n
+        const userLang = userData?.preferredLanguage || userData?.profile?.language || 'hi-IN'; // Default to Hindi if not set, or English
+        recognition.lang = userLang === 'en' ? 'en-IN' : userLang;
+        console.log(`✅ Initializing Web Speech Recognition with lang: ${recognition.lang}`);
 
         // Attach ALL event handlers HERE - this ensures they work on mobile browsers too
 
@@ -405,15 +408,38 @@ export default function HomeScreen() {
         };
 
         recognition.onerror = (event: any) => {
-          console.error('❌ Speech recognition error:', {
-            error: event.error,
+          // Explicitly log known error properties for debugging
+          console.error('❌ Speech recognition error details:', {
+            error: event.error, // e.g. 'not-allowed', 'no-speech', 'network'
             message: event.message,
-            timestamp: new Date().toISOString()
+            type: event.type,
+            timeStamp: event.timeStamp
           });
+
           setIsListening(false);
 
+          // Handle specific error cases
+          if (event.error === 'not-allowed') {
+            Alert.alert(
+              'Microphone Permission Denied',
+              'Please allow microphone access in your browser settings to use voice features.'
+            );
+            return;
+          }
+
+          if (event.error === 'no-speech') {
+            // Very common, silent retry often best
+            console.log('⚠️ No speech detected, retrying silently...');
+            if (!isSpeaking && !isProcessing) {
+              // Retry quickly without alert
+              if (errorRestartTimeoutRef.current) clearTimeout(errorRestartTimeoutRef.current);
+              errorRestartTimeoutRef.current = setTimeout(() => startListening(), 500) as unknown as number;
+            }
+            return;
+          }
+
           // Attempt a gentle auto-retry on transient errors ONLY when system is not busy
-          if (event?.error === 'network' || event?.error === 'no-speech' || event?.error === 'audio-capture') {
+          if (event?.error === 'network' || event?.error === 'audio-capture') {
             console.log('⚠️ Transient error, will retry in 1.5s');
             if (errorRestartTimeoutRef.current) {
               clearTimeout(errorRestartTimeoutRef.current);
@@ -426,7 +452,8 @@ export default function HomeScreen() {
             }, 1500) as unknown as number;
           } else {
             console.error('🚫 Non-transient error, showing alert');
-            Alert.alert('Speech Recognition Error', `Error: ${event.error}. Please try again.`);
+            // Only alert for unknown errors to avoid spamming
+            Alert.alert('Speech Recognition Error', `Error code: ${event.error}. Please try again.`);
           }
         };
 
@@ -614,6 +641,19 @@ export default function HomeScreen() {
       loadWeather();
     }
   }, [userLocation]);
+
+  // Dynamic Language Update: Sync speech recognition language when user profile loads
+  useEffect(() => {
+    if (recognitionRef.current && userData) {
+      const userLang = userData?.preferredLanguage || userData?.profile?.language || 'hi-IN';
+      const targetLang = userLang === 'en' ? 'en-IN' : userLang;
+
+      if (recognitionRef.current.lang !== targetLang) {
+        recognitionRef.current.lang = targetLang;
+        console.log(`🔄 Updated Speech Recognition Language to: ${targetLang}`);
+      }
+    }
+  }, [userData]);
 
   const loadUserData = async () => {
     try {
@@ -1852,11 +1892,18 @@ export default function HomeScreen() {
 
       // Get current user info
       const farmerId = userData?.phone || sessionUserId || 'demo-farmer';
-      const phoneNumber = userData?.phone || userData?.profile?.phone || '919876543210'; // Fallback if no phone
+      let phoneNumber = userData?.phone || userData?.profile?.phone || '919876543210'; // Fallback if no phone
 
       if (!phoneNumber) {
         Alert.alert('Error', 'No phone number found in profile to call.');
         return;
+      }
+
+      // Auto-format Indian numbers: If 10 digits, add +91
+      const cleaned = phoneNumber.replace(/\D/g, '');
+      if (cleaned.length === 10) {
+        phoneNumber = `+91${cleaned}`;
+        console.log(`📞 Auto-formatted phone to: ${phoneNumber}`);
       }
 
       await serverManager.initialize();
