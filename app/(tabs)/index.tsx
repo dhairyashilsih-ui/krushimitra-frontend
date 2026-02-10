@@ -124,7 +124,7 @@ export default function HomeScreen() {
       .trim()
       .split(' ')
       .filter(Boolean)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   }, [userData, t]);
 
@@ -738,7 +738,7 @@ export default function HomeScreen() {
       await AsyncStorage.setItem('userLocation', JSON.stringify({ lat, lon }));
 
       // Get address using Google Geocoding API
-      await getAddressFromCoordinates(lat, lon, accuracy);
+      await getAddressFromCoordinates(lat, lon, accuracy || undefined);
 
     } catch (error) {
       console.error('Error getting current location:', error);
@@ -1621,7 +1621,7 @@ export default function HomeScreen() {
                 user_name: contextSnapshot.userData?.name || 'Unknown',
                 user_email: contextSnapshot.userData?.email || 'Not provided',
                 user_phone: contextSnapshot.userData?.phone || 'Not provided',
-                user_language: contextSnapshot.userData?.language || language,
+                user_language: contextSnapshot.userData?.language || userData?.preferredLanguage || 'hi-IN',
                 user_location: contextSnapshot.userData?.location ? {
                   address: contextSnapshot.userData.location.address,
                   latitude: contextSnapshot.userData.location.latitude,
@@ -1633,7 +1633,7 @@ export default function HomeScreen() {
                   condition: contextSnapshot.userData.weather.condition
                 } : null
               },
-              last_5_conversations: (contextSnapshot.query || []).map(conv => ({
+              last_5_conversations: (contextSnapshot.query || []).map((conv: any) => ({
                 role: conv.role,
                 message: conv.message
               }))
@@ -3731,7 +3731,6 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '600',
     flexShrink: 1,
-    numberOfLines: 1,
   },
   timeContainer: {
     flexDirection: 'row',
