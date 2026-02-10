@@ -1,562 +1,886 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
-import { CameraView, useCameraPermissions, CameraType, FlashMode } from 'expo-camera';
-import * as ImagePicker from 'expo-image-picker';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  ScrollView,
+  Animated,
+  Platform,
+  Alert,
+  Image,
+  Dimensions,
+  Easing,
+  ActivityIndicator,
+  StatusBar,
+  Vibration
+} from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Camera as CameraIcon, Image as ImageIcon, RotateCcw, Zap, ScanLine, Leaf, Info, ShieldCheck, Sprout } from 'lucide-react-native';
-import { getServerConfig } from '@/src/services/serverManager';
+import * as ImagePicker from 'expo-image-picker';
+import {
+  ArrowLeft,
+  Upload,
+  Camera,
+  Leaf,
+  CheckCircle,
+  Zap,
+  Shield,
+  Sparkles,
+  Scan,
+  Bug,
+  Search,
+  BrainCircuit,
+  Microscope,
+  Check,
+  Activity
+} from 'lucide-react-native';
+import { BlurView } from 'expo-blur';
 
-interface DiseaseResult {
-    plant_identification: {
-        plant_common: string;
-        plant_scientific: string;
-        probability: number;
-        description: string;
-    };
-    disease_detection: {
-        disease: string;
-        confidence: number;
-        details: string;
-        advice: string;
-    };
-    ai_solution?: {
-        treatment: string;
-        prevention: string[];
-        tips: string[];
-    };
-    crop: string;
+const { width, height } = Dimensions.get('window');
+
+// --- Types ---
+interface PlantIdentification {
+  success: boolean;
+  plant_scientific: string;
+  plant_common: string;
+  confidence: number;
+  source: string;
 }
 
-export default function CropDiseaseScreen() {
-    const router = useRouter();
-    const [permission, requestPermission] = useCameraPermissions();
-    const [facing, setFacing] = useState<CameraType>('back');
-    const [flash, setFlash] = useState<FlashMode>('off');
-    const [image, setImage] = useState<string | null>(null);
-    const [uploading, setUploading] = useState(false);
-    const [result, setResult] = useState<DiseaseResult | null>(null);
-    const cameraRef = useRef<CameraView>(null);
+interface DiseaseDetection {
+  success: boolean;
+  disease: string;
+  confidence: number;
+  details: string;
+  severity?: string;
+  advice?: string;
+}
 
-    useEffect(() => {
-        (async () => {
-            // Request permissions on mount if not granted
-            if (permission && !permission.granted && permission.canAskAgain) {
-                // Auto-request or let user click button
-            }
-        })();
-    }, [permission]);
+interface AISolution {
+  treatment: string;
+  prevention: string[];
+  tips: string[];
+}
 
-    const takePicture = async () => {
-        if (cameraRef.current) {
-            try {
-                const photo = await cameraRef.current.takePictureAsync({
-                    quality: 0.8,
-                    skipProcessing: true,
-                });
-                if (photo) {
-                    setImage(photo.uri);
-                }
-            } catch (error) {
-                Alert.alert('Error', 'Failed to take photo');
-                console.error(error);
-            }
+interface AnalysisResult {
+  success: boolean;
+  plant_identification: PlantIdentification;
+  disease_detection: DiseaseDetection;
+  ai_solution?: AISolution;
+  message?: string;
+  crop?: string;
+}
+
+const ANALYSIS_STEPS = [
+  { id: 1, label: 'Identifying Crop (PlantNet)', icon: Leaf },
+  { id: 2, label: 'Scanning Leaves (YOLOvm)', icon: Scan },
+  { id: 3, label: 'Analyzing Disease (MobileNet)', icon: Microscope },
+  { id: 4, label: 'Consulting AI Expert (LLM)', icon: BrainCircuit },
+];
+
+export default function CropDiseaseDetectionScreen() {
+  const { t } = useTranslation();
+  const router = useRouter();
+
+  // State
+  const [isScanning, setIsScanning] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0); // 0 = idle, 1..4 = steps, 5 = done
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+
+  // Animation refs
+  const fadeAnimation = useRef(new Animated.Value(0)).current;
+  const scaleAnimation = useRef(new Animated.Value(0.95)).current;
+  const pulseAnimation = useRef(new Animated.Value(1)).current;
+
+  // New: Holographic Scanner
+  const scannerAnimation = useRef(new Animated.Value(0)).current;
+
+  // Results Animations (Sequential Reveal)
+  const resultHeaderAnim = useRef(new Animated.Value(0)).current;
+  const resultDetailsAnim = useRef(new Animated.Value(0)).current;
+  const resultActionAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Intro Animation
+    Animated.parallel([
+      Animated.timing(fadeAnimation, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnimation, {
+        toValue: 1,
+        duration: 800,
+        easing: Easing.out(Easing.back(1.5)),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Pulse effect for placeholder
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnimation, {
+          toValue: 1.05,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnimation, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  // Holographic Scanner Loop
+  useEffect(() => {
+    if (isScanning) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scannerAnimation, {
+            toValue: 1,
+            duration: 2000,
+            easing: Easing.linear,
+            useNativeDriver: true
+          }),
+          Animated.timing(scannerAnimation, {
+            toValue: 0,
+            duration: 2000,
+            easing: Easing.linear,
+            useNativeDriver: true
+          })
+        ])
+      ).start();
+    } else {
+      scannerAnimation.setValue(0);
+    }
+  }, [isScanning]);
+
+
+  // Simulate Steps Progression & Reveal Results
+  useEffect(() => {
+    if (isScanning) {
+      setCurrentStep(1);
+
+      const step1 = setTimeout(() => setCurrentStep(2), 1500);
+      const step2 = setTimeout(() => setCurrentStep(3), 3000);
+      const step3 = setTimeout(() => setCurrentStep(4), 4500);
+
+      return () => {
+        clearTimeout(step1);
+        clearTimeout(step2);
+        clearTimeout(step3);
+      };
+    } else {
+      // Reset or Finish
+      if (analysisResult) {
+        setCurrentStep(5); // Done
+
+        // Sequential Reveal
+        Animated.stagger(200, [
+          Animated.timing(resultHeaderAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic)
+          }),
+          Animated.timing(resultDetailsAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic)
+          }),
+          Animated.timing(resultActionAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic)
+          })
+        ]).start();
+
+      } else {
+        setCurrentStep(0);
+        resultHeaderAnim.setValue(0);
+        resultDetailsAnim.setValue(0);
+        resultActionAnim.setValue(0);
+      }
+    }
+  }, [isScanning, analysisResult]);
+
+  const handleBack = () => {
+    router.back();
+  };
+
+  const uploadImageToBackend = async (uri: string) => {
+    try {
+      setIsScanning(true);
+      setAnalysisResult(null);
+
+      // Reset animations
+      resultHeaderAnim.setValue(0);
+      resultDetailsAnim.setValue(0);
+      resultActionAnim.setValue(0);
+
+      const apiUrl =
+        process.env.EXPO_PUBLIC_BACKEND_URL ||
+        'https://krushimitra2-0-backend.onrender.com';
+
+      const formData = new FormData();
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append('file', blob, 'photo.jpg');
+      } else {
+        formData.append('file', {
+          uri: uri,
+          name: 'photo.jpg',
+          type: 'image/jpeg',
+        } as any);
+      }
+
+      formData.append('organ', 'leaf');
+
+      const res = await fetch(`${apiUrl}/predict`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      console.log('Analysis Result:', data);
+
+      // Ensure animation has reached at least step 4 before showing result
+      setTimeout(() => {
+        if (data.success) {
+          setAnalysisResult(data);
+          Vibration.vibrate(100); // Haptic feedback on success
+        } else {
+          Alert.alert('Analysis Failed', data.message || 'Could not analyze image.');
         }
-    };
+        setIsScanning(false);
+      }, 500);
 
-    const pickImage = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 0.8,
+    } catch (err) {
+      console.error('Upload Error:', err);
+      Alert.alert('Error', 'Failed to connect to the server.');
+      setIsScanning(false);
+    }
+  };
+
+  const pickImage = async (useCamera: boolean) => {
+    try {
+      let result;
+      if (useCamera) {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission Required', 'Camera access is needed.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1], // Square aspect for better model input
+          quality: 0.8,
         });
-
-        if (!result.canceled) {
-            setImage(result.assets[0].uri);
+      } else {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission Required', 'Gallery access is needed.');
+          return;
         }
-    };
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.8,
+        });
+      }
 
-    const retake = () => {
-        setImage(null);
-        setResult(null);
-    };
-
-    const analyzeImage = async () => {
-        if (!image) return;
-
-        setUploading(true);
-        try {
-            const { backendUrl } = getServerConfig();
-            const formData = new FormData();
-
-            // @ts-ignore - React Native FormData expects uri, name, type
-            formData.append('file', {
-                uri: image,
-                name: 'crop_image.jpg',
-                type: 'image/jpeg',
-            });
-
-            console.log('🌱 Uploading image to:', `${backendUrl}/predict`);
-
-            const response = await fetch(`${backendUrl}/predict`, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
-
-            const data = await response.json();
-            console.log('🔬 Analysis result:', data);
-
-            if (data.success) {
-                setResult(data);
-            } else {
-                Alert.alert('Analysis Failed', data.message || 'Could not analyze crop.');
-            }
-        } catch (error) {
-            console.error('Error analyzing crop:', error);
-            Alert.alert('Error', 'Failed to connect to analysis server.');
-        } finally {
-            setUploading(false);
-        }
-    };
-
-    if (!permission) {
-        // Camera permissions are still loading.
-        return <View style={styles.container}><ActivityIndicator size="large" color="#4CAF50" /></View>;
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0].uri;
+        setSelectedImage(uri);
+        uploadImageToBackend(uri);
+      }
+    } catch (error) {
+      console.error("Image Picker Error:", error);
+      Alert.alert('Error', 'Failed to pick image.');
     }
+  };
 
-    if (!permission.granted) {
-        // Camera permissions are not granted yet.
-        return (
-            <View style={styles.container}>
-                <Text style={styles.text}>We need your permission to show the camera</Text>
-                <TouchableOpacity onPress={requestPermission} style={styles.button}>
-                    <Text style={styles.buttonText}>Grant Permission</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => router.back()} style={[styles.button, { marginTop: 10, backgroundColor: '#666' }]}>
-                    <Text style={styles.buttonText}>Go Back</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
+  const hasDisease = analysisResult?.disease_detection.disease !== 'Healthy';
 
-    return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <ArrowLeft color="#1F2937" size={24} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Crop Doctor</Text>
-                <View style={{ width: 24 }} />
-            </View>
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <LinearGradient
+        colors={['#FFFFFF', '#F1F8E9', '#E0F2F1']}
+        locations={[0, 0.5, 1]}
+        style={styles.backgroundGradient}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+            <BlurView intensity={20} tint="light" style={styles.backIconCircle}>
+              <ArrowLeft size={22} color="#1B5E20" />
+            </BlurView>
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.headerTitle}>Crop Doctor AI</Text>
+            <Text style={styles.headerSubtitle}>Pro Diagnosis System</Text>
+          </View>
+        </View>
 
-            {!image ? (
-                <View style={styles.cameraContainer}>
-                    <CameraView style={styles.camera} facing={facing} flash={flash} ref={cameraRef}>
-                        <View style={styles.cameraControls}>
-                            <View style={styles.topControls}>
-                                <TouchableOpacity
-                                    style={styles.controlButton}
-                                    onPress={() => setFlash(flash === 'off' ? 'on' : 'off')}
-                                >
-                                    <Zap color={flash === 'on' ? "#FFD700" : "#FFF"} size={24} />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.controlButton}
-                                    onPress={() => setFacing(facing === 'back' ? 'front' : 'back')}
-                                >
-                                    <RotateCcw color="#FFF" size={24} />
-                                </TouchableOpacity>
-                            </View>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-                            <View style={styles.bottomControls}>
-                                <TouchableOpacity style={styles.galleryButton} onPress={pickImage}>
-                                    <ImageIcon color="#FFF" size={24} />
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
-                                    <View style={styles.captureInner} />
-                                </TouchableOpacity>
-                                <View style={{ width: 44 }} />
-                            </View>
-                        </View>
-                    </CameraView>
-                    <View style={styles.instructionContainer}>
-                        <ScanLine color="#4CAF50" size={20} />
-                        <Text style={styles.instructionText}>Point camera at the affected crop leaf</Text>
-                    </View>
-                </View>
-            ) : (
-                <ScrollView style={styles.resultContainer}>
-                    <View style={styles.imagePreviewContainer}>
-                        <Image source={{ uri: image }} style={styles.imagePreview} />
-                        {!result && (
-                            <TouchableOpacity style={styles.retakeButton} onPress={retake}>
-                                <RotateCcw color="#FFF" size={16} />
-                                <Text style={styles.retakeText}>Retake</Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
+          {/* Main Image Card with Holographic Scanner */}
+          <Animated.View style={[styles.mainCard, { opacity: fadeAnimation, transform: [{ scale: scaleAnimation }] }]}>
+            <View style={styles.imageContainer}>
+              {selectedImage ? (
+                <>
+                  <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="cover" />
 
-                    {!result ? (
-                        <View style={styles.actionContainer}>
-                            <Text style={styles.analyzePrompt}>Ready to analyze this crop?</Text>
-                            <TouchableOpacity
-                                style={[styles.analyzeButton, uploading && styles.disabledButton]}
-                                onPress={analyzeImage}
-                                disabled={uploading}
-                            >
-                                {uploading ? (
-                                    <ActivityIndicator color="#FFF" />
+                  {/* Holographic Scanner Overlay */}
+                  {isScanning && (
+                    <Animated.View
+                      style={[
+                        styles.scannerLine,
+                        {
+                          transform: [{
+                            translateY: scannerAnimation.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0, 320] // Height of image container
+                            })
+                          }]
+                        }
+                      ]}
+                    >
+                      <LinearGradient
+                        colors={['rgba(76, 175, 80, 0)', 'rgba(76, 175, 80, 0.8)', 'rgba(76, 175, 80, 0)']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={{ flex: 1 }}
+                      />
+                    </Animated.View>
+                  )}
+
+                  {/* Analysis Steps Overlay (Glassmorphism) */}
+                  {isScanning && (
+                    <View style={styles.overlayContainer}>
+                      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+                      <View style={styles.stepsContainer}>
+                        {ANALYSIS_STEPS.map((step) => {
+                          const isActive = currentStep === step.id;
+                          const isCompleted = currentStep > step.id;
+                          const isPending = currentStep < step.id;
+
+                          return (
+                            <View key={step.id} style={[styles.stepRow, { opacity: isPending ? 0.4 : 1 }]}>
+                              <View style={[styles.stepIcon,
+                              isActive && styles.stepIconActive,
+                              isCompleted && styles.stepIconCompleted
+                              ]}>
+                                {isCompleted ? (
+                                  <Check size={14} color="#FFF" />
                                 ) : (
-                                    <>
-                                        <ScanLine color="#FFF" size={20} />
-                                        <Text style={styles.analyzeButtonText}>Diagnose Disease</Text>
-                                    </>
+                                  <step.icon size={14} color={isActive ? "#FFF" : "#CCC"} />
                                 )}
-                            </TouchableOpacity>
-                        </View>
-                    ) : (
-                        <View style={styles.diagnosisContainer}>
-                            {/* Plant ID Card */}
-                            <View style={styles.card}>
-                                <View style={styles.cardHeader}>
-                                    <Leaf color="#4CAF50" size={20} />
-                                    <Text style={styles.cardTitle}>Plant Identification</Text>
-                                </View>
-                                <Text style={styles.plantName}>{result.plant_identification?.plant_common || 'Unknown Plant'}</Text>
-                                <Text style={styles.scientificName}>{result.plant_identification?.plant_scientific}</Text>
-                                <View style={styles.confidenceBadge}>
-                                    <Text style={styles.confidenceText}>
-                                        {Math.round((result.plant_identification?.probability || 0) * 100)}% Confidence
-                                    </Text>
-                                </View>
+                              </View>
+                              <Text style={[styles.stepText, isActive && styles.stepTextActive]}>
+                                {step.label}
+                              </Text>
+                              {isActive && <ActivityIndicator size="small" color="#4CAF50" style={{ marginLeft: 'auto' }} />}
                             </View>
+                          )
+                        })}
+                      </View>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <Animated.View style={[styles.placeholderContent, { transform: [{ scale: pulseAnimation }] }]}>
+                  <View style={styles.scanIconCircle}>
+                    <Scan size={44} color="#2E7D32" />
+                  </View>
+                  <Text style={styles.placeholderTitle}>Start Diagnosis</Text>
+                  <Text style={styles.placeholderSubtitle}>Upload a clear leaf photo</Text>
+                </Animated.View>
+              )}
+            </View>
 
-                            {/* Disease Detection Card */}
-                            <LinearGradient
-                                colors={result.disease_detection.disease === 'Healthy' ? ['#E8F5E9', '#C8E6C9'] : ['#FFEBEE', '#FFCDD2']}
-                                style={styles.card}
-                            >
-                                <View style={styles.cardHeader}>
-                                    <ShieldCheck color={result.disease_detection.disease === 'Healthy' ? "#2E7D32" : "#C62828"} size={20} />
-                                    <Text style={[styles.cardTitle, { color: result.disease_detection.disease === 'Healthy' ? "#2E7D32" : "#C62828" }]}>
-                                        Diagnosis: {result.disease_detection.disease}
-                                    </Text>
-                                </View>
-                                <Text style={styles.diseaseDetails}>
-                                    Confidence: {Math.round(result.disease_detection.confidence * 100)}%
-                                </Text>
-                                {result.ai_solution?.treatment && (
-                                    <View style={styles.solutionSection}>
-                                        <Text style={styles.sectionHeader}>Treatment</Text>
-                                        <Text style={styles.solutionText}>{result.ai_solution.treatment}</Text>
-                                    </View>
-                                )}
-                                {result.ai_solution?.prevention && result.ai_solution.prevention.length > 0 && (
-                                    <View style={styles.solutionSection}>
-                                        <Text style={styles.sectionHeader}>Prevention</Text>
-                                        {result.ai_solution.prevention.map((tip, idx) => (
-                                            <View key={idx} style={styles.bulletPoint}>
-                                                <View style={styles.bullet} />
-                                                <Text style={styles.bulletText}>{tip}</Text>
-                                            </View>
-                                        ))}
-                                    </View>
-                                )}
-                            </LinearGradient>
+            {/* Action Buttons */}
+            <View style={styles.actionsBar}>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.galleryBtn, isScanning && styles.disabledBtn]}
+                onPress={() => pickImage(false)}
+                disabled={isScanning}
+              >
+                <Upload size={20} color="#1B5E20" />
+                <Text style={styles.galleryBtnText}>Gallery</Text>
+              </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.newScanButton} onPress={retake}>
-                                <CameraIcon color="#FFF" size={20} />
-                                <Text style={styles.newScanText}>Scan Another Crop</Text>
-                            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.cameraBtn, isScanning && styles.disabledBtn]}
+                onPress={() => pickImage(true)}
+                disabled={isScanning}
+              >
+                <LinearGradient
+                  colors={['#43A047', '#2E7D32']}
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
+                <Camera size={20} color="#FFF" />
+                <Text style={styles.cameraBtnText}>Take Photo</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+
+          {/* Results Section (Sequential Reveal) */}
+          {analysisResult && (
+            <View style={styles.resultsSection}>
+
+              {/* 1. STATUS HEADER */}
+              <Animated.View style={{ opacity: resultHeaderAnim, transform: [{ translateY: resultHeaderAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+                <LinearGradient
+                  colors={hasDisease ? ['#FEF2F2', '#FEE2E2'] : ['#F1F8E9', '#DCFCE7']}
+                  style={[styles.statusCard, hasDisease ? styles.statusDanger : styles.statusSuccess]}
+                >
+                  <View style={styles.statusIconContainer}>
+                    {hasDisease ? <Bug size={24} color="#EF4444" /> : <Sparkles size={24} color="#4CAF50" />}
+                  </View>
+                  <View style={styles.statusTextContainer}>
+                    <Text style={styles.statusTitle}>
+                      {analysisResult.disease_detection.disease}
+                    </Text>
+                    <Text style={styles.statusSubtitle}>
+                      {analysisResult.plant_identification.plant_common} • {(analysisResult.disease_detection.confidence * 100).toFixed(0)}% Confidence
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </Animated.View>
+
+              {/* 2. DETAILS & AI SOLUTION */}
+              <Animated.View style={{ opacity: resultDetailsAnim, transform: [{ translateY: resultDetailsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+                <View style={styles.detailsCard}>
+                  <View style={[styles.detailRow, { borderBottomWidth: 1, borderBottomColor: '#F0F0F0', paddingBottom: 12 }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Activity size={18} color="#3B82F6" />
+                      <Text style={styles.sectionHeader}>Diagnosis Report</Text>
+                    </View>
+                    <View style={styles.aiTag}>
+                      <BrainCircuit size={12} color="#D97706" />
+                      <Text style={styles.aiTagText}>AI Analysis</Text>
+                    </View>
+                  </View>
+
+                  {/* Treatment / Advice */}
+                  <View style={styles.adviceSection}>
+                    {analysisResult.ai_solution ? (
+                      <>
+                        <View style={styles.adviceBlock}>
+                          <Text style={styles.adviceLabel}>🔬 Treatment</Text>
+                          <Text style={styles.adviceText}>{analysisResult.ai_solution.treatment}</Text>
                         </View>
+
+                        {analysisResult.ai_solution.prevention.length > 0 && (
+                          <View style={styles.adviceBlock}>
+                            <Text style={styles.adviceLabel}>🛡️ Prevention</Text>
+                            {analysisResult.ai_solution.prevention.map((tip, idx) => (
+                              <View key={idx} style={styles.checkListItem}>
+                                <CheckCircle size={14} color="#4CAF50" style={{ marginTop: 2 }} />
+                                <Text style={styles.listText}>{tip}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+
+                        <View style={styles.tipsBox}>
+                          <View style={styles.tipHeader}>
+                            <Zap size={14} color="#F59E0B" />
+                            <Text style={styles.tipsBoxTitle}>Pro Tip</Text>
+                          </View>
+                          <Text style={styles.tipsBoxText}>
+                            {analysisResult.ai_solution.tips[0] || "Regular monitoring is key to healthy crops."}
+                          </Text>
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={styles.adviceText}>{analysisResult.disease_detection.details || "No specific advice available."}</Text>
                     )}
-                </ScrollView>
-            )}
-        </SafeAreaView>
-    );
+                  </View>
+                </View>
+              </Animated.View>
+            </View>
+          )}
+
+        </ScrollView>
+      </LinearGradient>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F9FAFB',
-    },
-    text: {
-        fontSize: 18,
-        color: '#374151',
-        marginBottom: 20,
-        textAlign: 'center',
-        paddingHorizontal: 20,
-    },
-    button: {
-        backgroundColor: '#4CAF50',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 8,
-        alignSelf: 'center',
-    },
-    buttonText: {
-        color: '#FFF',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: '#FFF',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
-    },
-    backButton: {
-        padding: 8,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1F2937',
-    },
-    cameraContainer: {
-        flex: 1,
-        backgroundColor: '#000',
-    },
-    camera: {
-        flex: 1,
-    },
-    cameraControls: {
-        flex: 1,
-        backgroundColor: 'transparent',
-        justifyContent: 'space-between',
-        padding: 20,
-    },
-    topControls: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 10,
-    },
-    bottomControls: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 30,
-    },
-    controlButton: {
-        padding: 10,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        borderRadius: 20,
-    },
-    captureButton: {
-        width: 70,
-        height: 70,
-        borderRadius: 35,
-        backgroundColor: '#FFF',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    captureInner: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#FFF',
-        borderWidth: 2,
-        borderColor: '#000',
-    },
-    galleryButton: {
-        padding: 12,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        borderRadius: 24,
-    },
-    instructionContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-        backgroundColor: '#FFF',
-    },
-    instructionText: {
-        marginLeft: 8,
-        color: '#374151',
-        fontWeight: '500',
-    },
-    resultContainer: {
-        flex: 1,
-    },
-    imagePreviewContainer: {
-        position: 'relative',
-        height: 300,
-        backgroundColor: '#000',
-    },
-    imagePreview: {
-        width: '100%',
-        height: '100%',
-        resizeMode: 'contain',
-    },
-    retakeButton: {
-        position: 'absolute',
-        top: 16,
-        right: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-    },
-    retakeText: {
-        color: '#FFF',
-        marginLeft: 4,
-        fontWeight: '600',
-        fontSize: 14,
-    },
-    actionContainer: {
-        padding: 20,
-        alignItems: 'center',
-    },
-    analyzePrompt: {
-        fontSize: 18,
-        color: '#374151',
-        marginBottom: 16,
-        fontWeight: '500',
-    },
-    analyzeButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#4CAF50',
-        paddingHorizontal: 32,
-        paddingVertical: 16,
-        borderRadius: 30,
-        shadowColor: '#4CAF50',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-
-    disabledButton: {
-        backgroundColor: '#9CA3AF',
-        shadowOpacity: 0,
-    },
-    analyzeButtonText: {
-        color: '#FFF',
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginLeft: 8,
-    },
-    diagnosisContainer: {
-        padding: 16,
-    },
-    card: {
-        backgroundColor: '#FFF',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 2,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    cardTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginLeft: 8,
-        color: '#1F2937',
-    },
-    plantName: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#111827',
-        marginBottom: 4,
-    },
-    scientificName: {
-        fontSize: 14,
-        color: '#6B7280',
-        fontStyle: 'italic',
-        marginBottom: 8,
-    },
-    confidenceBadge: {
-        backgroundColor: '#ECFDF5',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 4,
-        alignSelf: 'flex-start',
-    },
-    confidenceText: {
-        color: '#059669',
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    diseaseDetails: {
-        fontSize: 16,
-        color: '#374151',
-        marginBottom: 12,
-    },
-    solutionSection: {
-        marginTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(0,0,0,0.05)',
-        paddingTop: 8,
-    },
-    sectionHeader: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1F2937',
-        marginTop: 8,
-        marginBottom: 4,
-    },
-    solutionText: {
-        fontSize: 15,
-        color: '#4B5563',
-        lineHeight: 22,
-    },
-    bulletPoint: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        marginTop: 4,
-    },
-    bullet: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: '#4CAF50',
-        marginTop: 8,
-        marginRight: 8,
-    },
-    bulletText: {
-        flex: 1,
-        fontSize: 15,
-        color: '#4B5563',
-        lineHeight: 22,
-    },
-    newScanButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#3B82F6',
-        paddingVertical: 14,
-        borderRadius: 12,
-        marginTop: 8,
-        marginBottom: 20,
-    },
-    newScanText: {
-        color: '#FFF',
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginLeft: 8,
-    },
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  backgroundGradient: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    paddingTop: Platform.OS === 'android' ? 45 : 15,
+  },
+  backButton: {
+    marginRight: 15,
+  },
+  backIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden'
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1B5E20',
+    letterSpacing: 0.5,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#43A047',
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    opacity: 0.8
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 50,
+  },
+  mainCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+    overflow: 'hidden',
+    marginBottom: 25,
+    borderWidth: 1,
+    borderColor: '#FFF',
+  },
+  imageContainer: {
+    height: 320,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  scannerLine: {
+    position: 'absolute',
+    top: -2,
+    left: 0,
+    right: 0,
+    height: 4,
+    zIndex: 20,
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    backgroundColor: '#4CAF50'
+  },
+  overlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  stepsContainer: {
+    width: '85%',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  stepIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
+  },
+  stepIconActive: {
+    backgroundColor: '#4CAF50',
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    borderColor: '#81C784'
+  },
+  stepIconCompleted: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50'
+  },
+  stepText: {
+    color: '#E0E0E0',
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.3
+  },
+  stepTextActive: {
+    color: '#FFF',
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2
+  },
+  placeholderContent: {
+    alignItems: 'center',
+  },
+  scanIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F1F8E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  placeholderTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1B5E20',
+    marginBottom: 8,
+  },
+  placeholderSubtitle: {
+    fontSize: 14,
+    color: '#66BB6A',
+    fontWeight: '500'
+  },
+  actionsBar: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    backgroundColor: '#FFF',
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 16,
+    gap: 8,
+    overflow: 'hidden',
+    position: 'relative'
+  },
+  galleryBtn: {
+    backgroundColor: '#F1F8E9',
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+  },
+  galleryBtnText: {
+    color: '#388E3C',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  cameraBtn: {
+    backgroundColor: '#2E7D32', // Fallback
+    shadowColor: "#2E7D32",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  cameraBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 15,
+    zIndex: 1
+  },
+  disabledBtn: {
+    opacity: 0.6,
+  },
+  resultsSection: {
+    gap: 20,
+  },
+  statusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  statusSuccess: {
+    borderColor: '#DCFCE7',
+  },
+  statusDanger: {
+    borderColor: '#FECACA',
+  },
+  statusIconContainer: {
+    marginRight: 15,
+    padding: 12,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  statusTextContainer: {
+    flex: 1,
+  },
+  statusTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  statusSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
+  },
+  detailsCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    elevation: 4,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  aiTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FEF3C7',
+    gap: 6,
+  },
+  aiTagText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#D97706',
+    letterSpacing: 0.5
+  },
+  adviceSection: {
+    gap: 16,
+  },
+  adviceBlock: {
+    gap: 6
+  },
+  adviceLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
+  },
+  adviceText: {
+    fontSize: 16,
+    color: '#374151',
+    lineHeight: 24,
+    fontWeight: '400'
+  },
+  checkListItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+    gap: 10,
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    borderRadius: 12
+  },
+  listText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+    fontWeight: '500'
+  },
+  tipsBox: {
+    marginTop: 10,
+    backgroundColor: '#EFF6FF',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DBEAFE'
+  },
+  tipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6
+  },
+  tipsBoxTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#2563EB',
+    textTransform: 'uppercase'
+  },
+  tipsBoxText: {
+    fontSize: 14,
+    color: '#1E40AF',
+    fontStyle: 'italic',
+    lineHeight: 20
+  },
 });
