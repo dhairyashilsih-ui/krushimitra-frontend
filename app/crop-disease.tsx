@@ -439,6 +439,7 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 4,
     },
+
     disabledButton: {
         backgroundColor: '#9CA3AF',
         shadowOpacity: 0,
