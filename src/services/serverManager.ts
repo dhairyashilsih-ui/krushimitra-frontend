@@ -68,7 +68,7 @@ class ServerManager {
     }
 
     this.initPromise = this.discoverAllServers();
-    
+
     try {
       await this.initPromise;
       this.isInitialized = true;
@@ -104,7 +104,7 @@ class ServerManager {
     // Set discovery lock
     this.isDiscovering = true;
     this.lastDiscoveryTime = Date.now();
-    
+
     console.debug('[ServerManager] Discovering servers (initial/forced)');
 
     try {
@@ -113,17 +113,17 @@ class ServerManager {
         this.discoverBackend()
       ]);
 
-    // Whisper and TTS run on same backend server
-    if (backendServer) {
-      this.config.whisper = {
-        url: backendServer.url.replace(':3001', ':5001'),
-        type: 'discovered',
-        available: false, // Will check separately if needed
-        lastChecked: Date.now()
-      };
-      
-      this.config.tts = backendServer;
-    }
+      // Whisper and TTS run on same backend server
+      if (backendServer) {
+        this.config.whisper = {
+          url: backendServer.url.replace(':3001', ':5001'),
+          type: 'discovered',
+          available: false, // Will check separately if needed
+          lastChecked: Date.now()
+        };
+
+        this.config.tts = backendServer;
+      }
 
       this.cacheStableValues();
       console.debug('[ServerManager] Discovery complete', {
@@ -142,7 +142,7 @@ class ServerManager {
   private async discoverOllama(): Promise<ServerEndpoint | null> {
     // Check environment variable first for mobile/production use
     const envUrl = process.env.EXPO_PUBLIC_OLLAMA_SERVER;
-    
+
     if (envUrl && !envUrl.includes('localhost')) {
       // User has configured a specific URL (e.g., ngrok tunnel for mobile access)
       const endpoint = {
@@ -151,16 +151,16 @@ class ServerManager {
         available: true,
         lastChecked: Date.now()
       };
-      
+
       this.config.ollama = endpoint;
       console.debug('[ServerManager] Using configured Ollama (mobile-ready)', endpoint.url);
       return endpoint;
     }
-    
+
     try {
       // Try auto-discovery for local development
       const discovered = await discoverServerCached('ollama');
-      
+
       if (discovered && discovered.reachable) {
         const endpoint = {
           url: `http://${discovered.ip}:${discovered.port}`,
@@ -168,7 +168,7 @@ class ServerManager {
           available: true,
           lastChecked: Date.now()
         };
-        
+
         this.config.ollama = endpoint;
         console.debug('[ServerManager] Ollama discovered', endpoint.url);
         return endpoint;
@@ -185,7 +185,7 @@ class ServerManager {
         available: false,
         lastChecked: Date.now()
       };
-      
+
       this.config.ollama = endpoint;
       console.debug('[ServerManager] Using localhost Ollama (desktop only)', endpoint.url);
       return endpoint;
@@ -203,7 +203,7 @@ class ServerManager {
     // Check environment variables first for mobile/production use
     const overrideUrl = process.env.EXPO_PUBLIC_BACKEND_OVERRIDE;
     const envUrl = overrideUrl || process.env.EXPO_PUBLIC_BACKEND_URL;
-    
+
     if (envUrl && !envUrl.includes('localhost')) {
       // User has configured a specific URL (e.g., ngrok, cloud, or LAN IP)
       const endpoint = {
@@ -212,17 +212,17 @@ class ServerManager {
         available: true,
         lastChecked: Date.now()
       };
-      
+
       this.config.backend = endpoint;
       this.config.tts = endpoint;
       console.debug('[ServerManager] Using configured backend (mobile-ready)', endpoint.url);
       return endpoint;
     }
-    
+
     try {
       // Try auto-discovery for local development
       const discovered = await discoverServerCached('backend');
-      
+
       if (discovered && discovered.reachable) {
         const endpoint = {
           url: `http://${discovered.ip}:${discovered.port}`,
@@ -230,7 +230,7 @@ class ServerManager {
           available: true,
           lastChecked: Date.now()
         };
-        
+
         this.config.backend = endpoint;
         this.config.tts = endpoint; // TTS runs on same server
         console.debug('[ServerManager] Backend discovered', endpoint.url);
@@ -248,7 +248,7 @@ class ServerManager {
         available: false,
         lastChecked: Date.now()
       };
-      
+
       this.config.backend = endpoint;
       this.config.tts = endpoint;
       console.debug('[ServerManager] Using localhost backend (desktop only)', endpoint.url);
@@ -266,13 +266,13 @@ class ServerManager {
   getOllamaEndpoint(): string | null {
     if (this.stableCached.ollamaUrl) return this.stableCached.ollamaUrl;
     if (!this.config.ollama) return null;
-    
+
     // If URL already includes /api/generate (e.g., cloudflare tunnel), don't append it
     const baseUrl = this.config.ollama.url;
     if (baseUrl.includes('/api/generate')) {
       return baseUrl;
     }
-    
+
     return `${baseUrl}/api/generate`;
   }
 
