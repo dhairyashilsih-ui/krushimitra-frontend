@@ -54,6 +54,8 @@ import {
 
 import * as Location from 'expo-location';
 import { serverManager } from '../src/services/serverManager';
+import { queryLLMStream } from '../src/services/llm'; // AI Service
+import { Bot, Sparkles, MessageCircle, Send, User } from 'lucide-react-native';
 
 
 interface MandiPrice {
@@ -545,6 +547,99 @@ export default function MandiPricesScreen() {
   const router = useRouter();
   const searchInputRef = useRef<TextInput>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // AI Assistant State
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiMessage, setAiMessage] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
+  const [isAiThinking, setIsAiThinking] = useState(false);
+  const [conversation, setConversation] = useState<any[]>([]);
+  const [userData, setUserData] = useState<any>(null); // For context
+
+  // Load User Data for AI Context
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        // Direct AsyncStorage usage to avoid type error
+        const json = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
+        if (json) setUserData(JSON.parse(json));
+      } catch (e) { console.log('Error loading user data for AI', e); }
+    };
+    loadUser();
+  }, []);
+
+  // AI Logic
+  const generateMandiAdvice = async (userQuery: string = "") => {
+    setIsAiThinking(true);
+    setAiResponse('');
+
+    try {
+      // 1. Build Context
+      const userContext = userData ? `
+        Farmer Name: ${userData.name || 'Farmer'}
+        Location: ${userData.address || 'Pune'}
+        Registered Crops: ${userData.crops?.join(', ') || 'Various'}
+      ` : "User: General Farmer (Profile not fully set)";
+
+      const mandiContext = nearestMandis.slice(0, 3).map(m =>
+        `${m.name} (${m.distanceKm}km)`
+      ).join(', ');
+
+      // Use mock prices for context if real ones aren't fetched yet for specific mandis
+      // In a real scenario, we'd fetch details first. Here we use the general price list as proxy.
+      const priceContext = prices.slice(0, 5).map(p => `${p.crop}: ₹${p.price} (${p.location})`).join('\n');
+
+      const systemPrompt = `
+        You are KrushiAI, an expert agricultural market advisor.
+        
+        USER PROFILE:
+        ${userContext}
+        
+        NEARBY MANDIS: ${mandiContext}
+        
+        CURRENT MARKET DATA SAMPLE:
+        ${priceContext}
+        
+        TASK:
+        ${userQuery ? `Answer this specific question: "${userQuery}"` : "Provide a brief, high-value insight about where to sell right now based on the prices above."}
+        
+        GUIDELINES:
+        - Be specific and actionable.
+        - Compare prices if relevant.
+        - Keep it short (under 3-4 sentences).
+        - Use Hindi or English based on the user's query language (Default: English).
+      `;
+
+      // 2. Call LLM
+      let fullResponse = "";
+      for await (const chunk of queryLLMStream(systemPrompt)) {
+        fullResponse += chunk;
+        setAiResponse(prev => prev + chunk);
+      }
+
+      // 3. Save to conversation
+      setConversation(prev => [
+        ...prev,
+        { role: 'user', text: userQuery || "Market Insight" },
+        { role: 'ai', text: fullResponse }
+      ]);
+
+    } catch (error) {
+      console.error("AI Error:", error);
+      setAiResponse("Sorry, I'm having trouble analyzing the market right now. Please try again.");
+    } finally {
+      setIsAiThinking(false);
+    }
+  };
+
+  const handleSendAiMessage = () => {
+    if (!aiMessage.trim()) return;
+    const msg = aiMessage;
+    setAiMessage('');
+    // Add user message immediately
+    setConversation(prev => [...prev, { role: 'user', text: msg }]);
+    generateMandiAdvice(msg);
+  };
 
   // Animation refs for futuristic effects
   const pulseAnimation = useRef(new Animated.Value(1)).current;
@@ -1550,6 +1645,92 @@ export default function MandiPricesScreen() {
       </Animated.View>
       {renderFilterModal()}
       {renderPinModal()}
+
+      {/* Floating AI Button */}
+      <TouchableOpacity
+        style={styles.floatingAIButton}
+        onPress={() => {
+          setShowAIModal(true);
+          if (conversation.length === 0) generateMandiAdvice(); // Auto-start with insight
+        }}
+      >
+        <LinearGradient
+          colors={['#2E7D32', '#4CAF50']}
+          style={styles.floatingAIButtonGradient}
+        >
+          <Bot size={28} color="#FFFFFF" />
+        </LinearGradient>
+      </TouchableOpacity>
+
+      {/* AI Assistant Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showAIModal}
+        onRequestClose={() => setShowAIModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.aiModalContent}>
+            <View style={styles.aiModalHeader}>
+              <View style={styles.aiTitleContainer}>
+                <Bot size={24} color="#4CAF50" />
+                <Text style={styles.aiModalTitle}>Krushi Market AI</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowAIModal(false)}>
+                <X size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.chatScroll} contentContainerStyle={{ paddingBottom: 20 }}>
+              {/* Welcome / Context */}
+              <View style={styles.aiWelcomeCard}>
+                <Sparkles size={16} color="#F59E0B" />
+                <Text style={styles.aiWelcomeText}>
+                  Analyzing {nearestMandis.length} nearby mandis for you, {userData?.name || 'Farmer'}...
+                </Text>
+              </View>
+
+              {/* Conversation History */}
+              {conversation.map((msg, idx) => (
+                <View key={idx} style={[
+                  styles.messageBubble,
+                  msg.role === 'user' ? styles.userBubble : styles.aiBubble
+                ]}>
+                  <Text style={[
+                    styles.messageText,
+                    msg.role === 'user' ? styles.userMessageText : styles.aiMessageText
+                  ]}>{msg.text}</Text>
+                </View>
+              ))}
+
+              {/* Real-time Streaming Response */}
+              {isAiThinking && (
+                <View style={[styles.messageBubble, styles.aiBubble]}>
+                  {aiResponse ? (
+                    <Text style={styles.aiMessageText}>{aiResponse}</Text>
+                  ) : (
+                    <Text style={styles.thinkingText}>Thinking...</Text>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={styles.inputArea}>
+              <TextInput
+                style={styles.aiInput}
+                placeholder="Ask about prices, trends, or advice..."
+                value={aiMessage}
+                onChangeText={setAiMessage}
+                onSubmitEditing={handleSendAiMessage}
+              />
+              <TouchableOpacity style={styles.sendButton} onPress={handleSendAiMessage}>
+                <Send size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView >
   );
 }
@@ -2344,5 +2525,137 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6B7280',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  // AI Assistant Styles
+  floatingAIButton: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    zIndex: 100,
+  },
+  floatingAIButtonGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  aiModalContent: {
+    backgroundColor: '#F8FAFC',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '80%',
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+  },
+  aiModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    paddingBottom: 12,
+  },
+  aiTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  aiModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  chatScroll: {
+    flex: 1,
+    marginBottom: 12,
+  },
+  aiWelcomeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  aiWelcomeText: {
+    fontSize: 13,
+    color: '#B45309',
+    flex: 1,
+  },
+  messageBubble: {
+    maxWidth: '85%',
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  userBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#4CAF50',
+    borderBottomRightRadius: 4,
+  },
+  aiBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  messageText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  userMessageText: {
+    color: '#FFFFFF',
+  },
+  aiMessageText: {
+    color: '#1F2937',
+  },
+  thinkingText: {
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  inputArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  aiInput: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    color: '#1F2937',
+    fontSize: 15,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

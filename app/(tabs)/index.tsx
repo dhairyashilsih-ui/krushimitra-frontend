@@ -594,7 +594,7 @@ export default function HomeScreen() {
     glowLoop.start();
     orbitalLoop.start();
     scaleLoop.start();
-    weatherLoop.start();
+    // weatherLoop.start(); // Disabled to stop breathing animation
     pulseLoop.start();
 
     // Start listening when component mounts
@@ -938,6 +938,22 @@ export default function HomeScreen() {
 
   const loadWeather = async () => {
     try {
+      // INSTANT LOAD: Check cache first
+      try {
+        const cached = await AsyncStorage.getItem('lastWeatherData');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          console.log('📦 Loaded weather from cache');
+          setWeatherData(parsed);
+          setWeather(`${getWeatherIcon(parsed.condition)} ${parsed.condition}, ${parsed.temperature}°C`);
+          if (parsed.weeklyForecast) {
+            setWeeklyForecast(parsed.weeklyForecast);
+          }
+        }
+      } catch (e) {
+        console.log('Cache load check failed', e);
+      }
+
       // Use real GPS location if available, otherwise fallback to Pune
       let lat = 18.5919;
       let lon = 73.7389;
@@ -996,6 +1012,12 @@ export default function HomeScreen() {
         if (forecast && forecast.length > 0) {
           setWeeklyForecast(forecast);
         }
+
+        // Cache the latest data for next launch
+        AsyncStorage.setItem('lastWeatherData', JSON.stringify({
+          ...result.data,
+          weeklyForecast: forecast || []
+        })).catch(e => console.warn('Failed to cache weather', e));
 
         // Generate AI farming advisory based on weather data
         await generateFarmingAdvisory(result.data, userAddress);
@@ -2223,439 +2245,426 @@ export default function HomeScreen() {
         {/* Professional Light-Themed Weather Forecast */}
         <View style={styles.weatherForecastContainer}>
           {/* Current Weather Card */}
-          <Animated.View
-            style={[
-              styles.currentWeatherCard,
-              {
-                transform: [{
-                  scale: weatherAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [1, 1.008]
-                  })
-                }]
-              }
-            ]}
+          style={[
+            styles.currentWeatherCard,
+            // Animation removed as per user request
+          ]}
           >
-            <LinearGradient
-              colors={['#FFFFFF', '#F8FDF9', '#F0FDF4']}
-              style={styles.weatherCardGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={styles.currentWeatherHeader}>
-                <View style={styles.locationContainer}>
-                  <View style={styles.locationIconWrapper}>
-                    <MapPin size={16} color="#4CAF50" />
-                  </View>
-                  <Text style={styles.locationText} numberOfLines={1} ellipsizeMode="tail">
-                    {userAddress}
-                  </Text>
-                </View>
-                <View style={styles.timeContainer}>
-                  <Text style={styles.updateTime}>
-                    {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
-                  <View style={styles.liveIndicatorWeather}>
-                    <Text style={styles.liveText}>LIVE</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.currentWeatherMain}>
-                <View style={styles.tempSection}>
-                  <Animated.Text
-                    style={[
-                      styles.currentTemp,
-                      {
-                        transform: [{
-                          scale: pulseAnimation.interpolate({
-                            inputRange: [1, 1.1],
-                            outputRange: [1, 1.03]
-                          })
-                        }]
-                      }
-                    ]}
-                  >
-                    {weatherData ? `${weatherData.temperature}°C` : 'Loading...'}
-                  </Animated.Text>
-                  <View style={styles.weatherIconWrapper}>
-                    <Animated.View
-                      style={[{
-                        transform: [{
-                          translateY: weatherAnimation.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0, -4]
-                          })
-                        }]
-                      }]}
-                    >
-                      <View style={styles.iconBackground}>
-                        <Cloud size={52} color="#4CAF50" />
-                      </View>
-                    </Animated.View>
-                    <Text style={styles.weatherCondition}>
-                      {weatherData?.condition || 'Cloudy'}
-                    </Text>
-                    <Text style={styles.feelsLike}>
-                      {weatherData ? `Feels like ${weatherData.temperature}°C` : 'Loading...'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.miniStatsContainer}>
-                  <View style={styles.miniStatsGrid}>
-                    <View style={styles.miniStat}>
-                      <View style={[styles.statIconWrapper, { backgroundColor: '#E8F5E9' }]}>
-                        <Cloud size={16} color="#4CAF50" />
-                      </View>
-                      <Text style={styles.miniStatValue}>
-                        {weatherData ? `${weatherData.precipitationProbability}%` : '--'}
-                      </Text>
-                      <Text style={styles.miniStatLabel}>Rain</Text>
-                    </View>
-                    <View style={styles.miniStat}>
-                      <View style={[styles.statIconWrapper, { backgroundColor: '#E8F5E9' }]}>
-                        <Thermometer size={16} color="#4CAF50" />
-                      </View>
-                      <Text style={styles.miniStatValue}>
-                        {weatherData ? `${weatherData.humidity}%` : '--'}
-                      </Text>
-                      <Text style={styles.miniStatLabel}>Humidity</Text>
-                    </View>
-                    <View style={styles.miniStat}>
-                      <View style={[styles.statIconWrapper, { backgroundColor: '#E8F5E9' }]}>
-                        <Activity size={16} color="#4CAF50" />
-                      </View>
-                      <Text style={styles.miniStatValue}>
-                        {weatherData ? `${weatherData.windSpeed} km/h` : '-- km/h'}
-                      </Text>
-                      <Text style={styles.miniStatLabel}>Wind</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              {/* Farming Advisory Section */}
-              <View style={styles.advisorySection}>
-                <View style={styles.advisoryIconWrapper}>
-                  <Sparkles size={20} color="#4CAF50" />
-                </View>
-                <View style={styles.advisoryTextContainer}>
-                  <Text style={styles.advisoryTitle}>AI Farming Advisory</Text>
-                  <Text style={styles.advisoryText}>
-                    {isLoadingAdvisory ? 'Generating personalized advice...' : aiAdvisory}
-                  </Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-
-          {/* Weekly Forecast */}
-          <Animated.View
-            style={[
-              styles.weeklyForecastCard,
-              {
-                opacity: weatherAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.9, 1]
-                })
-              }
-            ]}
+          <LinearGradient
+            colors={['#FFFFFF', '#F8FDF9', '#F0FDF4']}
+            style={styles.weatherCardGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
           >
-            <LinearGradient
-              colors={['#FFFFFF', '#F8FDF9']}
-              style={styles.forecastCardGradient}
-            >
-              <View style={styles.forecastHeader}>
-                <Text style={styles.forecastTitle}>{t('weather.weekTitle')}</Text>
-                <View style={[styles.forecastBadge, { backgroundColor: 'rgba(76, 175, 80, 0.1)' }]}>
-                  <Text style={[styles.forecastBadgeText, { color: '#4CAF50' }]}>WEEK</Text>
+            <View style={styles.currentWeatherHeader}>
+              <View style={styles.locationContainer}>
+                <View style={styles.locationIconWrapper}>
+                  <MapPin size={16} color="#4CAF50" />
                 </View>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.forecastGrid}
-              >
-                {Array.from({ length: 7 }).map((_, index) => {
-                  // Get forecast data for this day or use fallback
-                  const day = weeklyForecast[index] || {
-                    date: new Date(Date.now() + index * 24 * 60 * 60 * 1000).toISOString(),
-                    temperatureMax: 28,
-                    temperatureMin: 18,
-                    weatherCode: 1101,
-                    precipitationProbability: 20
-                  };
-
-                  const date = new Date(day.date);
-                  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                  const dayName = index === 0 ? 'Today' : dayNames[date.getDay()];
-
-                  // Map weather code to icon
-                  const getIconFromCode = (code: number) => {
-                    if (code === 1000 || code === 1100) return '☀️';
-                    if (code === 1101) return '⛅';
-                    if (code === 1001 || code === 1102) return '☁️';
-                    if (code === 4000 || code === 4200) return '🌦️';
-                    if (code === 4001 || code === 4201) return '🌧️';
-                    if (code === 8000) return '⛈️';
-                    if (code >= 5000 && code <= 5101) return '🌨️';
-                    return '🌤️';
-                  };
-
-                  return (
-                    <View
-                      key={index}
-                      style={[
-                        styles.dailyForecastCard,
-                        index === 0 && styles.todayCard,
-                        index === 0 && { borderColor: '#4CAF50' }
-                      ]}
-                    >
-                      <Text style={[
-                        styles.dayName,
-                        index === 0 && styles.todayText,
-                        index === 0 && { color: '#4CAF50' }
-                      ]}>
-                        {dayName}
-                      </Text>
-                      <View style={styles.dayIconContainer}>
-                        <View style={[
-                          styles.dayIconWrapper,
-                          index === 0 && styles.todayIconWrapper,
-                          index === 0 && { backgroundColor: 'rgba(76, 175, 80, 0.2)' }
-                        ]}>
-                          <Text style={{ fontSize: 20 }}>{getIconFromCode(day.weatherCode)}</Text>
-                        </View>
-                      </View>
-                      <View style={styles.dayTemps}>
-                        <Text style={[
-                          styles.highTemp,
-                          index === 0 && styles.todayTemp,
-                          index === 0 && { color: '#4CAF50' }
-                        ]}>
-                          {day.temperatureMax}°
-                        </Text>
-                        <Text style={styles.lowTemp}>{day.temperatureMin}°</Text>
-                      </View>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            </LinearGradient>
-          </Animated.View>
-        </View>
-
-        {/* AI Assistant Modal */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={showAIModal}
-          onRequestClose={hideAIModal}
-        >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <View style={styles.modalTitleContainer}>
-                  <Bot size={24} color="#4CAF50" />
-                  <Text style={styles.modalTitle}>KrushiAI Assistant</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.modalCloseButton}
-                  onPress={hideAIModal}
-                >
-                  <X size={20} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.modalBody}>
-                <View style={styles.modalSparkleContainer}>
-                  <Sparkles size={16} color="rgba(255, 255, 255, 0.6)" style={styles.modalSparkle1} />
-                  <Sparkles size={12} color="rgba(255, 255, 255, 0.4)" style={styles.modalSparkle2} />
-                  <Sparkles size={14} color="rgba(255, 255, 255, 0.5)" style={styles.modalSparkle3} />
-                </View>
-
-                <View style={styles.modalTitleContainer}>
-                  <Text style={styles.modalTitle}>KrushiAI</Text>
-                  <Text style={styles.modalSubtitle}>Your Personal Farming Assistant</Text>
-                </View>
-                <Animated.View style={[
-                  styles.glowingAIContainer,
-                  {
-                    shadowOpacity: glowAnimation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.3, 0.8],
-                    }),
-                    shadowRadius: glowAnimation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [10, 25],
-                    }),
-                  }
-                ]}>
-                  <View style={styles.perfectCircle}>
-                    <LinearGradient
-                      colors={['#E0F2FE', '#BAE6FD', '#7DD3FC', '#38BDF8']}
-                      style={styles.circleGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                    >
-                      <Bot size={90} color="#FFFFFF" />
-                    </LinearGradient>
-                  </View>
-                </Animated.View>
-
-                <Text style={styles.modalTitle}>AI Assistant Ready</Text>
-                <Text style={styles.modalSubtitle}>
-                  Your intelligent farming companion is now activated!
-                  Ask me about weather, crops, pests, and get instant help.
+                <Text style={styles.locationText} numberOfLines={1} ellipsizeMode="tail">
+                  {userAddress}
                 </Text>
-
-                <View style={styles.modalFeatures}>
-                  <View style={styles.featureItem}>
-                    <Cloud size={16} color="rgba(255, 255, 255, 0.8)" />
-                    <Text style={styles.featureText}>Weather Updates</Text>
-                  </View>
-                  <View style={styles.featureItem}>
-                    <Activity size={16} color="rgba(255, 255, 255, 0.8)" />
-                    <Text style={styles.featureText}>Crop Monitoring</Text>
-                  </View>
-                  <View style={styles.featureItem}>
-                    <Bell size={16} color="rgba(255, 255, 255, 0.8)" />
-                    <Text style={styles.featureText}>Smart Alerts</Text>
-                  </View>
+              </View>
+              <View style={styles.timeContainer}>
+                <Text style={styles.updateTime}>
+                  {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+                <View style={styles.liveIndicatorWeather}>
+                  <Text style={styles.liveText}>LIVE</Text>
                 </View>
-
-                <TouchableOpacity style={styles.startChatButton} onPress={startAIConversation}>
-                  <LinearGradient
-                    colors={['#FFFFFF', '#F8FAFC']}
-                    style={styles.startChatGradient}
-                  >
-                    <MessageCircle size={20} color="#22C55E" />
-                    <Text style={styles.startChatText}>Start Chatting</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </Modal>
 
-        {/* Service Sections - Rectangular Cards */}
-        <View style={styles.servicesContainer}>
-          <Text style={styles.sectionTitle}>{t('home.agriculturalServices')}</Text>
-
-          {/* Row 1: Crop Disease Detection & Farmer Activity */}
-          <View style={styles.serviceRow}>
-            <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToCropDisease}>
-              <LinearGradient
-                colors={['#FEF2F2', '#FEE2E2', '#FECACA']}
-                style={styles.serviceGradient}
-              >
-                <View style={styles.serviceHeader}>
-                  <View style={styles.serviceIconContainer}>
-                    <Camera size={24} color="#EF4444" />
-                  </View>
-                  <Animated.View style={[{ transform: [{ scale: pulseAnimation }] }]}>
-                    <View style={styles.activeIndicator} />
+            <View style={styles.currentWeatherMain}>
+              <View style={styles.tempSection}>
+                <Animated.Text
+                  style={[
+                    styles.currentTemp,
+                    {
+                      transform: [{
+                        scale: pulseAnimation.interpolate({
+                          inputRange: [1, 1.1],
+                          outputRange: [1, 1.03]
+                        })
+                      }]
+                    }
+                  ]}
+                >
+                  {weatherData ? `${weatherData.temperature}°C` : 'Loading...'}
+                </Animated.Text>
+                <View style={styles.weatherIconWrapper}>
+                  <Animated.View
+                    style={[{
+                      transform: [{
+                        translateY: weatherAnimation.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, -4]
+                        })
+                      }]
+                    }]}
+                  >
+                    <View style={styles.iconBackground}>
+                      <Cloud size={52} color="#4CAF50" />
+                    </View>
                   </Animated.View>
+                  <Text style={styles.weatherCondition}>
+                    {weatherData?.condition || 'Cloudy'}
+                  </Text>
+                  <Text style={styles.feelsLike}>
+                    {weatherData ? `Feels like ${weatherData.temperature}°C` : 'Loading...'}
+                  </Text>
                 </View>
-                <Text style={styles.serviceTitle}>{t('service.cropDisease.title')}</Text>
-                <Text style={styles.serviceDescription}>{t('service.cropDisease.desc')}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+              </View>
 
-            <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToActivityTracking}>
-              <LinearGradient
-                colors={['#F0FDF4', '#DCFCE7', '#BBF7D0']}
-                style={styles.serviceGradient}
-              >
-                <View style={styles.serviceHeader}>
-                  <View style={styles.serviceIconContainer}>
-                    <Activity size={24} color="#22C55E" />
+              <View style={styles.miniStatsContainer}>
+                <View style={styles.miniStatsGrid}>
+                  <View style={styles.miniStat}>
+                    <View style={[styles.statIconWrapper, { backgroundColor: '#E8F5E9' }]}>
+                      <Cloud size={16} color="#4CAF50" />
+                    </View>
+                    <Text style={styles.miniStatValue}>
+                      {weatherData ? `${weatherData.precipitationProbability}%` : '--'}
+                    </Text>
+                    <Text style={styles.miniStatLabel}>Rain</Text>
+                  </View>
+                  <View style={styles.miniStat}>
+                    <View style={[styles.statIconWrapper, { backgroundColor: '#E8F5E9' }]}>
+                      <Thermometer size={16} color="#4CAF50" />
+                    </View>
+                    <Text style={styles.miniStatValue}>
+                      {weatherData ? `${weatherData.humidity}%` : '--'}
+                    </Text>
+                    <Text style={styles.miniStatLabel}>Humidity</Text>
+                  </View>
+                  <View style={styles.miniStat}>
+                    <View style={[styles.statIconWrapper, { backgroundColor: '#E8F5E9' }]}>
+                      <Activity size={16} color="#4CAF50" />
+                    </View>
+                    <Text style={styles.miniStatValue}>
+                      {weatherData ? `${weatherData.windSpeed} km/h` : '-- km/h'}
+                    </Text>
+                    <Text style={styles.miniStatLabel}>Wind</Text>
                   </View>
                 </View>
-                <Text style={styles.serviceTitle}>{t('service.activity.title')}</Text>
-                <Text style={styles.serviceDescription}>{t('service.activity.desc')}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Farming Advisory Section */}
+            <View style={styles.advisorySection}>
+              <View style={styles.advisoryIconWrapper}>
+                <Sparkles size={20} color="#4CAF50" />
+              </View>
+              <View style={styles.advisoryTextContainer}>
+                <Text style={styles.advisoryTitle}>AI Farming Advisory</Text>
+                <Text style={styles.advisoryText}>
+                  {isLoadingAdvisory ? 'Generating personalized advice...' : aiAdvisory}
+                </Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </Animated.View>
+
+        {/* Weekly Forecast */}
+        <View
+          style={[
+            styles.weeklyForecastCard,
+            // Animation removed
+          ]}
+        >
+          <LinearGradient
+            colors={['#FFFFFF', '#F8FDF9']}
+            style={styles.forecastCardGradient}
+          >
+            <View style={styles.forecastHeader}>
+              <Text style={styles.forecastTitle}>{t('weather.weekTitle')}</Text>
+              <View style={[styles.forecastBadge, { backgroundColor: 'rgba(76, 175, 80, 0.1)' }]}>
+                <Text style={[styles.forecastBadgeText, { color: '#4CAF50' }]}>WEEK</Text>
+              </View>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.forecastGrid}
+            >
+              {Array.from({ length: 7 }).map((_, index) => {
+                // Get forecast data for this day or use fallback
+                const day = weeklyForecast[index] || {
+                  date: new Date(Date.now() + index * 24 * 60 * 60 * 1000).toISOString(),
+                  temperatureMax: 28,
+                  temperatureMin: 18,
+                  weatherCode: 1101,
+                  precipitationProbability: 20
+                };
+
+                const date = new Date(day.date);
+                const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const dayName = index === 0 ? 'Today' : dayNames[date.getDay()];
+
+                // Map weather code to icon
+                const getIconFromCode = (code: number) => {
+                  if (code === 1000 || code === 1100) return '☀️';
+                  if (code === 1101) return '⛅';
+                  if (code === 1001 || code === 1102) return '☁️';
+                  if (code === 4000 || code === 4200) return '🌦️';
+                  if (code === 4001 || code === 4201) return '🌧️';
+                  if (code === 8000) return '⛈️';
+                  if (code >= 5000 && code <= 5101) return '🌨️';
+                  return '🌤️';
+                };
+
+                return (
+                  <View
+                    key={index}
+                    style={[
+                      styles.dailyForecastCard,
+                      index === 0 && styles.todayCard,
+                      index === 0 && { borderColor: '#4CAF50' }
+                    ]}
+                  >
+                    <Text style={[
+                      styles.dayName,
+                      index === 0 && styles.todayText,
+                      index === 0 && { color: '#4CAF50' }
+                    ]}>
+                      {dayName}
+                    </Text>
+                    <View style={styles.dayIconContainer}>
+                      <View style={[
+                        styles.dayIconWrapper,
+                        index === 0 && styles.todayIconWrapper,
+                        index === 0 && { backgroundColor: 'rgba(76, 175, 80, 0.2)' }
+                      ]}>
+                        <Text style={{ fontSize: 20 }}>{getIconFromCode(day.weatherCode)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dayTemps}>
+                      <Text style={[
+                        styles.highTemp,
+                        index === 0 && styles.todayTemp,
+                        index === 0 && { color: '#4CAF50' }
+                      ]}>
+                        {day.temperatureMax}°
+                      </Text>
+                      <Text style={styles.lowTemp}>{day.temperatureMin}°</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </LinearGradient>
+        </Animated.View>
+      </View>
+
+      {/* AI Assistant Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showAIModal}
+        onRequestClose={hideAIModal}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleContainer}>
+                <Bot size={24} color="#4CAF50" />
+                <Text style={styles.modalTitle}>KrushiAI Assistant</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={hideAIModal}
+              >
+                <X size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <View style={styles.modalSparkleContainer}>
+                <Sparkles size={16} color="rgba(255, 255, 255, 0.6)" style={styles.modalSparkle1} />
+                <Sparkles size={12} color="rgba(255, 255, 255, 0.4)" style={styles.modalSparkle2} />
+                <Sparkles size={14} color="rgba(255, 255, 255, 0.5)" style={styles.modalSparkle3} />
+              </View>
+
+              <View style={styles.modalTitleContainer}>
+                <Text style={styles.modalTitle}>KrushiAI</Text>
+                <Text style={styles.modalSubtitle}>Your Personal Farming Assistant</Text>
+              </View>
+              <Animated.View style={[
+                styles.glowingAIContainer,
+                {
+                  shadowOpacity: glowAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.3, 0.8],
+                  }),
+                  shadowRadius: glowAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [10, 25],
+                  }),
+                }
+              ]}>
+                <View style={styles.perfectCircle}>
+                  <LinearGradient
+                    colors={['#E0F2FE', '#BAE6FD', '#7DD3FC', '#38BDF8']}
+                    style={styles.circleGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Bot size={90} color="#FFFFFF" />
+                  </LinearGradient>
+                </View>
+              </Animated.View>
+
+              <Text style={styles.modalTitle}>AI Assistant Ready</Text>
+              <Text style={styles.modalSubtitle}>
+                Your intelligent farming companion is now activated!
+                Ask me about weather, crops, pests, and get instant help.
+              </Text>
+
+              <View style={styles.modalFeatures}>
+                <View style={styles.featureItem}>
+                  <Cloud size={16} color="rgba(255, 255, 255, 0.8)" />
+                  <Text style={styles.featureText}>Weather Updates</Text>
+                </View>
+                <View style={styles.featureItem}>
+                  <Activity size={16} color="rgba(255, 255, 255, 0.8)" />
+                  <Text style={styles.featureText}>Crop Monitoring</Text>
+                </View>
+                <View style={styles.featureItem}>
+                  <Bell size={16} color="rgba(255, 255, 255, 0.8)" />
+                  <Text style={styles.featureText}>Smart Alerts</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity style={styles.startChatButton} onPress={startAIConversation}>
+                <LinearGradient
+                  colors={['#FFFFFF', '#F8FAFC']}
+                  style={styles.startChatGradient}
+                >
+                  <MessageCircle size={20} color="#22C55E" />
+                  <Text style={styles.startChatText}>Start Chatting</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </View>
-
-          {/* Row 2: Government Schemes & Mandi Prices */}
-          <View style={styles.serviceRow}>
-            <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToSchemes}>
-              <LinearGradient
-                colors={['#EFF6FF', '#DBEAFE', '#BFDBFE']}
-                style={styles.serviceGradient}
-              >
-                <View style={styles.serviceHeader}>
-                  <View style={styles.serviceIconContainer}>
-                    <Calendar size={24} color="#3B82F6" />
-                  </View>
-                </View>
-                <Text style={styles.serviceTitle}>{t('service.schemes.title')}</Text>
-                <Text style={styles.serviceDescription}>{t('service.schemes.desc')}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToMandiPrices}>
-              <LinearGradient
-                colors={['#FFFBEB', '#FEF3C7', '#FDE68A']}
-                style={styles.serviceGradient}
-              >
-                <View style={styles.serviceHeader}>
-                  <View style={styles.serviceIconContainer}>
-                    <IndianRupee size={24} color="#F59E0B" />
-                  </View>
-                  <View style={styles.liveIndicator}>
-                    <Text style={styles.liveText}>LIVE</Text>
-                  </View>
-                </View>
-                <Text style={styles.serviceTitle}>{t('service.mandi.title')}</Text>
-                <Text style={styles.serviceDescription}>{t('service.mandi.desc')}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-
-          {/* Row 3: News & CarboSafe */}
-          <View style={styles.serviceRow}>
-            <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToNews}>
-              <LinearGradient
-                colors={['#F3E8FF', '#E9D5FF', '#DDD6FE']}
-                style={styles.serviceGradient}
-              >
-                <View style={styles.serviceHeader}>
-                  <View style={styles.serviceIconContainer}>
-                    <Newspaper size={24} color="#8B5CF6" />
-                  </View>
-                  <View style={styles.newsIndicator}>
-                    <Text style={styles.newsText}>TODAY</Text>
-                  </View>
-                </View>
-                <Text style={styles.serviceTitle}>{t('service.news.title')}</Text>
-                <Text style={styles.serviceDescription}>{t('service.news.desc')}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToCarboSafe}>
-              <LinearGradient
-                colors={['#F0FDF4', '#DCFCE7', '#BBF7D0']}
-                style={styles.serviceGradient}
-              >
-                <View style={styles.serviceHeader}>
-                  <View style={styles.serviceIconContainer}>
-                    <Leaf size={24} color="#22C55E" />
-                  </View>
-                  <View style={styles.carbonIndicator}>
-                    <Text style={styles.carbonText}>EARN</Text>
-                  </View>
-                </View>
-                <Text style={styles.serviceTitle}>{t('service.carbosafe.title')}</Text>
-                <Text style={styles.serviceDescription}>{t('service.carbosafe.desc')}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      </Modal>
+
+      {/* Service Sections - Rectangular Cards */}
+      <View style={styles.servicesContainer}>
+        <Text style={styles.sectionTitle}>{t('home.agriculturalServices')}</Text>
+
+        {/* Row 1: Crop Disease Detection & Farmer Activity */}
+        <View style={styles.serviceRow}>
+          <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToCropDisease}>
+            <LinearGradient
+              colors={['#FEF2F2', '#FEE2E2', '#FECACA']}
+              style={styles.serviceGradient}
+            >
+              <View style={styles.serviceHeader}>
+                <View style={styles.serviceIconContainer}>
+                  <Camera size={24} color="#EF4444" />
+                </View>
+                <Animated.View style={[{ transform: [{ scale: pulseAnimation }] }]}>
+                  <View style={styles.activeIndicator} />
+                </Animated.View>
+              </View>
+              <Text style={styles.serviceTitle}>{t('service.cropDisease.title')}</Text>
+              <Text style={styles.serviceDescription}>{t('service.cropDisease.desc')}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToActivityTracking}>
+            <LinearGradient
+              colors={['#F0FDF4', '#DCFCE7', '#BBF7D0']}
+              style={styles.serviceGradient}
+            >
+              <View style={styles.serviceHeader}>
+                <View style={styles.serviceIconContainer}>
+                  <Activity size={24} color="#22C55E" />
+                </View>
+              </View>
+              <Text style={styles.serviceTitle}>{t('service.activity.title')}</Text>
+              <Text style={styles.serviceDescription}>{t('service.activity.desc')}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        {/* Row 2: Government Schemes & Mandi Prices */}
+        <View style={styles.serviceRow}>
+          <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToSchemes}>
+            <LinearGradient
+              colors={['#EFF6FF', '#DBEAFE', '#BFDBFE']}
+              style={styles.serviceGradient}
+            >
+              <View style={styles.serviceHeader}>
+                <View style={styles.serviceIconContainer}>
+                  <Calendar size={24} color="#3B82F6" />
+                </View>
+              </View>
+              <Text style={styles.serviceTitle}>{t('service.schemes.title')}</Text>
+              <Text style={styles.serviceDescription}>{t('service.schemes.desc')}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToMandiPrices}>
+            <LinearGradient
+              colors={['#FFFBEB', '#FEF3C7', '#FDE68A']}
+              style={styles.serviceGradient}
+            >
+              <View style={styles.serviceHeader}>
+                <View style={styles.serviceIconContainer}>
+                  <IndianRupee size={24} color="#F59E0B" />
+                </View>
+                <View style={styles.liveIndicator}>
+                  <Text style={styles.liveText}>LIVE</Text>
+                </View>
+              </View>
+              <Text style={styles.serviceTitle}>{t('service.mandi.title')}</Text>
+              <Text style={styles.serviceDescription}>{t('service.mandi.desc')}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        {/* Row 3: News & CarboSafe */}
+        <View style={styles.serviceRow}>
+          <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToNews}>
+            <LinearGradient
+              colors={['#F3E8FF', '#E9D5FF', '#DDD6FE']}
+              style={styles.serviceGradient}
+            >
+              <View style={styles.serviceHeader}>
+                <View style={styles.serviceIconContainer}>
+                  <Newspaper size={24} color="#8B5CF6" />
+                </View>
+                <View style={styles.newsIndicator}>
+                  <Text style={styles.newsText}>TODAY</Text>
+                </View>
+              </View>
+              <Text style={styles.serviceTitle}>{t('service.news.title')}</Text>
+              <Text style={styles.serviceDescription}>{t('service.news.desc')}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToCarboSafe}>
+            <LinearGradient
+              colors={['#F0FDF4', '#DCFCE7', '#BBF7D0']}
+              style={styles.serviceGradient}
+            >
+              <View style={styles.serviceHeader}>
+                <View style={styles.serviceIconContainer}>
+                  <Leaf size={24} color="#22C55E" />
+                </View>
+                <View style={styles.carbonIndicator}>
+                  <Text style={styles.carbonText}>EARN</Text>
+                </View>
+              </View>
+              <Text style={styles.serviceTitle}>{t('service.carbosafe.title')}</Text>
+              <Text style={styles.serviceDescription}>{t('service.carbosafe.desc')}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+      </View>
+    </ScrollView>
+    </SafeAreaView >
   );
 }
 
