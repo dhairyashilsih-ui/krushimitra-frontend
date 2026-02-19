@@ -152,76 +152,138 @@ const PRICE_RANGES = [
   { label: 'Above ₹10000', min: 10000, max: Infinity }
 ];
 
+const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
+  const [expanded, setExpanded] = useState(false);
+  const [mandiPrices, setMandiPrices] = useState<MandiPrice[]>([]);
+  const [loadingPrices, setLoadingPrices] = useState(false);
+
+  const toggleExpand = async () => {
+    if (!expanded && mandiPrices.length === 0) {
+      setLoadingPrices(true);
+      try {
+        // Simulate fetching prices for this specific mandi
+        await new Promise(resolve => setTimeout(resolve, 600)); // Fake network delay
+
+        // Simple mock filter logic using the global MOCK_MANDI_PRICES
+        const locationSpecific = MOCK_MANDI_PRICES.filter(p =>
+          mandi.name.includes(p.location) || p.location === 'Pune'
+        );
+
+        setMandiPrices(locationSpecific.length > 0 ? locationSpecific : MOCK_MANDI_PRICES.slice(0, 3));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingPrices(false);
+      }
+    }
+    setExpanded(!expanded);
+  };
+
+  return (
+    <View
+      style={{
+        backgroundColor: '#fff',
+        marginBottom: 16,
+        borderRadius: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.05)'
+      }}
+    >
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={toggleExpand}
+        style={{ padding: 16, flexDirection: 'row', alignItems: 'center' }}
+      >
+        <View style={{
+          width: 50, height: 50, borderRadius: 25,
+          backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center',
+          marginRight: 16
+        }}>
+          <Text style={{ fontSize: 24 }}>🏢</Text>
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 4 }}>
+            {mandi.name}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Compass size={14} color="#4CAF50" style={{ marginRight: 4 }} />
+            <Text style={{ fontSize: 14, color: '#4CAF50', fontWeight: '600' }}>
+              {mandi.distanceKm} km away
+            </Text>
+          </View>
+        </View>
+
+        <View style={{
+          width: 32, height: 32, borderRadius: 16,
+          backgroundColor: expanded ? '#4CAF50' : '#F3F4F6',
+          alignItems: 'center', justifyContent: 'center'
+        }}>
+          {expanded ? (
+            <ChevronUp size={20} color="#fff" />
+          ) : (
+            <ChevronDown size={20} color="#6B7280" />
+          )}
+        </View>
+      </TouchableOpacity>
+
+      {expanded && (
+        <View style={{ borderTopWidth: 1, borderTopColor: '#F3F4F6', backgroundColor: '#FAFAFA' }}>
+          {loadingPrices ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#4CAF50" />
+              <Text style={{ marginTop: 8, color: '#666', fontSize: 12 }}>Fetching latest prices...</Text>
+            </View>
+          ) : (
+            <View>
+              {mandiPrices.map((price, idx) => (
+                <View key={idx} style={{
+                  flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                  paddingVertical: 12, paddingHorizontal: 16,
+                  borderBottomWidth: idx < mandiPrices.length - 1 ? 1 : 0,
+                  borderBottomColor: '#E5E7EB'
+                }}>
+                  <View>
+                    <Text style={{ fontSize: 16, fontWeight: '500', color: '#374151' }}>{price.crop}</Text>
+                    <Text style={{ fontSize: 12, color: '#9CA3AF' }}>{price.category}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1F2937' }}>
+                      ₹{price.price}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#6B7280' }}>
+                      /{price.unit?.replace('per ', '')}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+              <TouchableOpacity style={{
+                padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E5E7EB'
+              }}>
+                <Text style={{ color: '#4CAF50', fontWeight: '600', fontSize: 14 }}>View Full Report</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+};
+
 // Mock data for demonstration
 const MOCK_MANDI_PRICES: MandiPrice[] = [
-  // Vegetables
-  {
-    _id: '1',
-    crop: 'Tomato',
-    location: 'Kochi',
-    price: 45,
-    date: '2024-01-15T10:30:00Z',
-    category: 'Vegetables',
-    unit: 'per kg',
-    change: 5,
-    changePercent: 12.5
-  },
-  {
-    _id: '2',
-    crop: 'Onion',
-    location: 'Thiruvananthapuram',
-    price: 35,
-    date: '2024-01-15T10:30:00Z',
-    category: 'Vegetables',
-    unit: 'per kg',
-    change: -2,
-    changePercent: -5.4
-  },
-  {
-    _id: '3',
-    crop: 'Potato',
-    location: 'Kozhikode',
-    price: 25,
-    date: '2024-01-15T10:30:00Z',
-    category: 'Vegetables',
-    unit: 'per kg',
-    change: 3,
-    changePercent: 13.6
-  },
-  {
-    _id: '4',
-    crop: 'Spinach',
-    location: 'Kottayam',
-    price: 20,
-    date: '2024-01-15T10:30:00Z',
-    category: 'Vegetables',
-    unit: 'per kg',
-    change: 2,
-    changePercent: 11.1
-  },
-  {
-    _id: '5',
-    crop: 'Cabbage',
-    location: 'Thrissur',
-    price: 18,
-    date: '2024-01-15T10:30:00Z',
-    category: 'Vegetables',
-    unit: 'per kg',
-    change: -1,
-    changePercent: -5.3
-  },
-  // Fruits
-  {
-    _id: '6',
-    crop: 'Mango',
-    location: 'Kollam',
-    price: 80,
-    date: '2024-01-15T10:30:00Z',
-    category: 'Fruits',
-    unit: 'per kg',
-    change: 10,
-    changePercent: 14.3
-  },
+  { _id: '1', crop: 'Tomato (Hybrid)', location: 'Gultekdi Market Yard', price: 2400, date: '2024-03-20', category: 'Vegetables', unit: 'per Quintal', change: 200, changePercent: 5.2, quality: 'Grade A' },
+  { _id: '2', crop: 'Onion (Red)', location: 'Lasalgaon Mandi', price: 1800, date: '2024-03-20', category: 'Vegetables', unit: 'per Quintal', change: -150, changePercent: -4.1, quality: 'Click to see details' },
+  { _id: '3', crop: 'Wheat (Lokwan)', location: 'MPMC Vashi', price: 3200, date: '2024-03-19', category: 'Cereals', unit: 'per Quintal', change: 0, changePercent: 0, quality: 'Premium' },
+  { _id: '4', crop: 'Soybean', location: 'Latur APMC', price: 4600, date: '2024-03-19', category: 'Pulses', unit: 'per Quintal', change: 100, changePercent: 2.1, quality: 'FAQ' },
+  { _id: '5', crop: 'Cotton', location: 'Akola Market', price: 6800, date: '2024-03-18', category: 'Cash Crops', unit: 'per Quintal', change: -50, changePercent: -0.8, quality: 'Long Staple' },
+  { _id: '6', crop: 'Potato', location: 'Pune', price: 1500, date: '2024-03-20', category: 'Vegetables', unit: 'per Quintal', change: 50, changePercent: 3.4 },
   {
     _id: '7',
     crop: 'Orange',
@@ -1460,176 +1522,32 @@ export default function MandiPricesScreen() {
           </View>
         </Animated.View>
 
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#4CAF50" />
-            <TextInput
-              ref={searchInputRef}
-              style={styles.searchInput}
-              placeholder="Search commodities, locations..."
-              value={searchQuery}
-              onChangeText={handleSearch}
-              onFocus={() => setShowSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <X size={20} color="#4CAF50" />
-              </TouchableOpacity>
-            )}
-            <Zap size={20} color="#4CAF50" style={styles.magicIcon} />
-          </View>
-
-          {/* Search Suggestions */}
-          {showSuggestions && suggestions.length > 0 && (
-            <View style={styles.suggestionsContainer}>
-              {suggestions.map((suggestion, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.suggestionItem}
-                  onPress={() => handleSuggestionPress(suggestion)}
-                >
-                  <Search size={16} color="#4CAF50" />
-                  <Text style={styles.suggestionText}>{suggestion}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Nearest Mandis Sections (Replaces Browse by Category) */}
-        <View style={styles.categoryContainer}>
-          <View style={styles.sectionHeader}>
-            <Compass size={20} color="#4CAF50" />
-            <Text style={styles.categoryTitle}>Nearest Mandis Near You</Text>
-          </View>
-
+        {/* Main Content - Mandi Cards */}
+        <View style={{ flex: 1, padding: 16 }}>
           {loadingNearest ? (
-            <ActivityIndicator size="small" color="#4CAF50" style={{ margin: 20 }} />
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator size="large" color="#4CAF50" />
+              <Text style={{ marginTop: 16, color: '#666' }}>Finding nearest mandis...</Text>
+            </View>
           ) : locationError ? (
-            <TouchableOpacity onPress={fetchNearestMandis} style={{ padding: 15, alignItems: 'center' }}>
-              <Text style={{ color: '#666', marginBottom: 5 }}>{locationError}</Text>
-              <Text style={{ color: '#4CAF50', fontWeight: 'bold' }}>Tap to Retry</Text>
-            </TouchableOpacity>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#EF4444', textAlign: 'center', marginBottom: 16 }}>{locationError}</Text>
+              <TouchableOpacity
+                style={{ backgroundColor: '#4CAF50', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }}
+                onPress={fetchNearestMandis}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Retry</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoryScroll}
-            >
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
               {nearestMandis.map((mandi, index) => (
-                <View key={index} style={styles.categoryItem}>
-                  <TouchableOpacity
-                    style={[
-                      styles.categoryCard,
-                      filters.location === mandi.name && styles.categoryCardActive,
-                      { width: 140, height: 100, justifyContent: 'center' }
-                    ]}
-                    onPress={() => {
-                      // Filter by this location
-                      setFilters(prev => ({
-                        ...prev,
-                        location: prev.location === mandi.name ? 'All' : mandi.name
-                      }));
-                      setSearchQuery(''); // Clear search if picking location
-                    }}
-                  >
-                    <View style={[styles.categoryIcon, { backgroundColor: '#E8F5E9' }]}>
-                      <MapPin size={24} color="#2E7D32" />
-                    </View>
-                    <Text style={[styles.categoryName, { marginTop: 8, textAlign: 'center' }]} numberOfLines={2}>
-                      {mandi.name}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-                      {mandi.distanceKm} km
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                <MandiCard key={index} mandi={mandi} />
               ))}
             </ScrollView>
           )}
         </View>
-
-        {/* Filters and Sort */}
-        <View style={styles.controlsContainer}>
-          <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setShowFilters(true)}
-          >
-            <Filter size={16} color="#4CAF50" />
-            <Text style={styles.filterButtonText}>Filters</Text>
-          </TouchableOpacity>
-
-          <View style={styles.sortContainer}>
-            <TouchableOpacity
-              style={styles.sortButton}
-              onPress={() => {
-                const sortOptions = ['price', 'name', 'popularity', 'date'];
-                const currentIndex = sortOptions.indexOf(sortBy);
-                const nextIndex = (currentIndex + 1) % sortOptions.length;
-                setSortBy(sortOptions[nextIndex] as 'price' | 'name' | 'popularity' | 'date');
-              }}
-            >
-              <Text style={styles.sortButtonText}>
-                Sort: {sortBy === 'price' ? 'Price' : sortBy === 'name' ? 'Name' : sortBy === 'popularity' ? 'Popularity' : 'Date'}
-              </Text>
-              <ChevronDown size={16} color="#4CAF50" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sortOrderButton}
-              onPress={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-            >
-              {sortOrder === 'asc' ? <ChevronUp size={16} color="#4CAF50" /> : <ChevronDown size={16} color="#4CAF50" />}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Results Count */}
-        <View style={styles.resultsContainer}>
-          <Text style={styles.resultsText}>
-            {filteredPrices.length} commodities found
-          </Text>
-          <View style={styles.activeFilters}>
-            {filters.category !== 'All' && (
-              <View style={styles.activeFilter}>
-                <Text style={styles.activeFilterText}>{filters.category}</Text>
-                <TouchableOpacity onPress={() => handleFilterChange('category', 'All')}>
-                  <X size={12} color="#4CAF50" />
-                </TouchableOpacity>
-              </View>
-            )}
-            {filters.location !== 'All' && (
-              <View style={styles.activeFilter}>
-                <Text style={styles.activeFilterText}>{filters.location}</Text>
-                <TouchableOpacity onPress={() => handleFilterChange('location', 'All')}>
-                  <X size={12} color="#4CAF50" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Price List */}
-        <FlatList
-          data={filteredPrices}
-          renderItem={renderPriceCard}
-          keyExtractor={(item) => item._id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.priceList}
-          refreshing={refreshing}
-          onRefresh={refreshPrices}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Activity size={48} color="#9CA3AF" />
-              <Text style={styles.emptyText}>No commodities found</Text>
-              <Text style={styles.emptySubtext}>Try adjusting your search or filters</Text>
-            </View>
-          }
-        />
       </Animated.View>
-
       {renderFilterModal()}
       {renderPinModal()}
     </SafeAreaView >
