@@ -155,6 +155,7 @@ const PRICE_RANGES = [
 ];
 
 const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
+  const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [mandiPrices, setMandiPrices] = useState<MandiPrice[]>([]);
   const [loadingPrices, setLoadingPrices] = useState(false);
@@ -265,9 +266,15 @@ const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
                   </View>
                 </View>
               ))}
-              <TouchableOpacity style={{
-                padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E5E7EB'
-              }}>
+              <TouchableOpacity
+                style={{
+                  padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E5E7EB'
+                }}
+                onPress={() => router.push({
+                  pathname: '/mandi-report',
+                  params: { mandiName: mandi.name, distance: mandi.distanceKm }
+                })}
+              >
                 <Text style={{ color: '#4CAF50', fontWeight: '600', fontSize: 14 }}>View Full Report</Text>
               </TouchableOpacity>
             </View>
