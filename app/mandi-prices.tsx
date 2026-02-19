@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  SafeAreaView, 
-  ScrollView, 
-  TextInput, 
-  FlatList, 
-  Modal, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  ScrollView,
+  TextInput,
+  FlatList,
+  Modal,
   Animated,
   Platform,
   Alert,
   Dimensions,
-  Easing
+  Easing,
+  ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,14 +25,14 @@ import { networkManager } from '../src/utils/networkManager';
 import { pinnedItemsManager } from '../src/utils/pinnedItems';
 import { alertSystem } from '../src/utils/alertSystem';
 import OfflineIndicator from '../src/components/OfflineIndicator';
-import { 
-  Search, 
-  Filter, 
-  X, 
-  IndianRupee, 
-  MapPin, 
-  Calendar, 
-  TrendingUp, 
+import {
+  Search,
+  Filter,
+  X,
+  IndianRupee,
+  MapPin,
+  Calendar,
+  TrendingUp,
   TrendingDown,
   ChevronDown,
   ChevronUp,
@@ -47,9 +48,13 @@ import {
   Zap,
   Leaf,
   Sparkles,
+  Compass,
   Activity,
-  Shield
 } from 'lucide-react-native';
+
+import * as Location from 'expo-location';
+import { serverManager } from '../src/services/serverManager';
+
 
 interface MandiPrice {
   _id: string;
@@ -64,6 +69,13 @@ interface MandiPrice {
   quality?: string;
 }
 
+interface NearestMandi {
+  name: string;
+  distanceKm: number;
+  lat: number;
+  lon: number;
+}
+
 interface FilterState {
   category: string;
   priceRange: { min: number; max: number };
@@ -73,7 +85,7 @@ interface FilterState {
 const CATEGORIES = [
   'All',
   'Vegetables',
-  'Fruits', 
+  'Fruits',
   'Cereals',
   'Pulses',
   'Nuts & Seeds',
@@ -462,11 +474,16 @@ export default function MandiPricesScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('');
   const [showSubcategories, setShowSubcategories] = useState<string>('');
-  
+
+  // Nearest Mandi State
+  const [nearestMandis, setNearestMandis] = useState<NearestMandi[]>([]);
+  const [loadingNearest, setLoadingNearest] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
   const router = useRouter();
   const searchInputRef = useRef<TextInput>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  
+
   // Animation refs for futuristic effects
   const pulseAnimation = useRef(new Animated.Value(1)).current;
   const floatAnimation = useRef(new Animated.Value(0)).current;
@@ -484,7 +501,42 @@ export default function MandiPricesScreen() {
   useEffect(() => {
     initializeApp();
     setupAnimations();
+    fetchNearestMandis();
   }, []);
+
+  const fetchNearestMandis = async () => {
+    setLoadingNearest(true);
+    setLocationError(null);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationError('Enable location to see nearest mandis');
+        setLoadingNearest(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+
+      const backendUrl = serverManager.getBackendEndpoint() || 'http://localhost:3001';
+      // Use configured backend URL or fallback to localhost for dev
+      // Note: In production/device, localhost won't work, so serverManager should be configured.
+
+      const response = await fetch(`${backendUrl}/mandis/nearest?lat=${latitude}&lon=${longitude}`);
+
+      if (!response.ok) throw new Error('Failed to fetch mandis');
+
+      const result = await response.json();
+      if (result.status === 'success') {
+        setNearestMandis(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching nearest mandis:', error);
+      setLocationError('Could not find nearest mandis');
+    } finally {
+      setLoadingNearest(false);
+    }
+  };
 
   const setupAnimations = () => {
     // Start entrance animations
@@ -713,7 +765,7 @@ export default function MandiPricesScreen() {
   // Handle real-time price updates
   const handleRealTimeUpdate = (update: any) => {
     setPrices(prevPrices => {
-      const updatedPrices = prevPrices.map(price => 
+      const updatedPrices = prevPrices.map(price =>
         price._id === update.id ? {
           ...price,
           price: update.price,
@@ -795,10 +847,10 @@ export default function MandiPricesScreen() {
       const itemKey = `${item.crop}-${item.location}`;
       setPinnedItems(prev => new Set([...prev, itemKey]));
       setShowPinModal(null);
-      
+
       // Create automatic price alert for pinned item
       await createAutomaticPriceAlert(item, pinnedItem);
-      
+
       Alert.alert('Success', 'Item pinned successfully!');
     } catch (error) {
       console.error('Error pinning item:', error);
@@ -831,7 +883,7 @@ export default function MandiPricesScreen() {
     try {
       // Create best price alert when price goes above current price + 10%
       const targetPrice = item.price * 1.1;
-      
+
       await alertSystem.createPriceAlert(
         item.crop,
         item.location,
@@ -846,7 +898,7 @@ export default function MandiPricesScreen() {
 
       // Create price drop alert when price goes below current price - 10%
       const dropTargetPrice = item.price * 0.9;
-      
+
       await alertSystem.createPriceAlert(
         item.crop,
         item.location,
@@ -868,7 +920,7 @@ export default function MandiPricesScreen() {
     if (searchQuery.length > 0) {
       const cropNames = [...new Set(prices.map(p => p.crop))];
       const filteredSuggestions = cropNames
-        .filter(crop => 
+        .filter(crop =>
           crop.toLowerCase().includes(searchQuery.toLowerCase())
         )
         .slice(0, 5);
@@ -903,7 +955,7 @@ export default function MandiPricesScreen() {
     }
 
     // Price range filter
-    filtered = filtered.filter(price => 
+    filtered = filtered.filter(price =>
       price.price >= filters.priceRange.min && price.price <= filters.priceRange.max
     );
 
@@ -952,7 +1004,7 @@ export default function MandiPricesScreen() {
     setSelectedSubcategory('');
     setShowSubcategories('');
     setFilters(prev => ({ ...prev, category }));
-    
+
     // Clear search when selecting a category
     if (category !== 'All') {
       setSearchQuery('');
@@ -993,15 +1045,15 @@ export default function MandiPricesScreen() {
       if (isOnline) {
         // Simulate API call when online
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // In a real app, you would fetch from API here
         // const response = await fetch('/api/mandiprices');
         // const data = await response.json();
-        
+
         const newPrices = MOCK_MANDI_PRICES;
         setPrices(newPrices);
         setFilteredPrices(newPrices);
-        
+
         // Cache the new data
         await offlineStorage.cacheMandiPrices(newPrices);
         setLastSync(new Date());
@@ -1057,9 +1109,9 @@ export default function MandiPricesScreen() {
 
   const renderPriceCard = ({ item }: { item: MandiPrice }) => {
     const isPinned = pinnedItems.has(`${item.crop}-${item.location}`);
-    
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.priceCard}
         onPress={() => router.push(`/commodity-details?commodity=${encodeURIComponent(item.crop)}`)}
       >
@@ -1100,7 +1152,7 @@ export default function MandiPricesScreen() {
               <Text style={styles.priceValue}>{formatPrice(item.price)}</Text>
               <Text style={styles.priceUnit}>{item.unit}</Text>
             </View>
-            
+
             {item.change !== undefined && (
               <View style={styles.changeSection}>
                 <View style={styles.changeRow}>
@@ -1244,8 +1296,8 @@ export default function MandiPricesScreen() {
               <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
                 <Text style={styles.clearButtonText}>Clear All</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.applyButton} 
+              <TouchableOpacity
+                style={styles.applyButton}
                 onPress={() => setShowFilters(false)}
               >
                 <Text style={styles.applyButtonText}>Apply Filters</Text>
@@ -1309,7 +1361,7 @@ export default function MandiPricesScreen() {
             </View>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => setShowPinModal(null)}
               >
@@ -1342,7 +1394,7 @@ export default function MandiPricesScreen() {
         />
       ))}
 
-      <OfflineIndicator 
+      <OfflineIndicator
         onSyncPress={refreshPrices}
         showDetails={true}
       />
@@ -1354,7 +1406,7 @@ export default function MandiPricesScreen() {
             transform: [{ scale: headerScaleAnimation }],
           }
         ]}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
           >
@@ -1362,31 +1414,31 @@ export default function MandiPricesScreen() {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Mandi Prices</Text>
           <View style={styles.headerActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.alertButton}
               onPress={() => router.push('/price-alerts')}
             >
               <Bell size={24} color="#4CAF50" />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.analyticsButton}
               onPress={() => router.push('/market-analytics')}
             >
               <BarChart3 size={24} color="#4CAF50" />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.comparisonButton}
               onPress={() => router.push('/price-comparison')}
             >
               <GitCompare size={24} color="#4CAF50" />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.pinnedButton}
               onPress={() => router.push('/pinned-items')}
             >
               <Pin size={24} color="#4CAF50" />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.alertsButton}
               onPress={() => router.push('/alerts-notifications')}
             >
@@ -1399,7 +1451,7 @@ export default function MandiPricesScreen() {
                 </View>
               )}
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.refreshButton}
               onPress={refreshPrices}
             >
@@ -1446,76 +1498,62 @@ export default function MandiPricesScreen() {
           )}
         </View>
 
-        {/* Category Sections */}
+        {/* Nearest Mandis Sections (Replaces Browse by Category) */}
         <View style={styles.categoryContainer}>
           <View style={styles.sectionHeader}>
-            <Leaf size={20} color="#4CAF50" />
-            <Text style={styles.categoryTitle}>Browse by Category</Text>
+            <Compass size={20} color="#4CAF50" />
+            <Text style={styles.categoryTitle}>Nearest Mandis Near You</Text>
           </View>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryScroll}
-          >
-            {Object.entries(CATEGORY_DATA).map(([category, data]) => (
-              <View key={category} style={styles.categoryItem}>
-                <TouchableOpacity
-                  style={[
-                    styles.categoryCard,
-                    selectedCategory === category && styles.categoryCardActive,
-                    { borderColor: data.color }
-                  ]}
-                  onPress={() => handleCategoryPress(category)}
-                >
-                  <Text style={styles.categoryIcon}>{data.icon}</Text>
-                  <Text style={[
-                    styles.categoryName,
-                    selectedCategory === category && styles.categoryNameActive
-                  ]}>
-                    {category}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.subcategoryToggle}
-                    onPress={() => toggleSubcategories(category)}
-                  >
-                    {showSubcategories === category ? (
-                      <ChevronUp size={16} color={selectedCategory === category ? '#FFFFFF' : data.color} />
-                    ) : (
-                      <ChevronDown size={16} color={selectedCategory === category ? '#FFFFFF' : data.color} />
-                    )}
-                  </TouchableOpacity>
-                </TouchableOpacity>
 
-                {/* Subcategories */}
-                {showSubcategories === category && (
-                  <View style={styles.subcategoryContainer}>
-                    {data.subcategories.map((subcategory) => (
-                      <TouchableOpacity
-                        key={subcategory}
-                        style={[
-                          styles.subcategoryItem,
-                          selectedSubcategory === subcategory && styles.subcategoryItemActive
-                        ]}
-                        onPress={() => handleSubcategoryPress(subcategory)}
-                      >
-                        <Text style={[
-                          styles.subcategoryText,
-                          selectedSubcategory === subcategory && styles.subcategoryTextActive
-                        ]}>
-                          {subcategory}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-            ))}
-          </ScrollView>
+          {loadingNearest ? (
+            <ActivityIndicator size="small" color="#4CAF50" style={{ margin: 20 }} />
+          ) : locationError ? (
+            <TouchableOpacity onPress={fetchNearestMandis} style={{ padding: 15, alignItems: 'center' }}>
+              <Text style={{ color: '#666', marginBottom: 5 }}>{locationError}</Text>
+              <Text style={{ color: '#4CAF50', fontWeight: 'bold' }}>Tap to Retry</Text>
+            </TouchableOpacity>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryScroll}
+            >
+              {nearestMandis.map((mandi, index) => (
+                <View key={index} style={styles.categoryItem}>
+                  <TouchableOpacity
+                    style={[
+                      styles.categoryCard,
+                      filters.location === mandi.name && styles.categoryCardActive,
+                      { width: 140, height: 100, justifyContent: 'center' }
+                    ]}
+                    onPress={() => {
+                      // Filter by this location
+                      setFilters(prev => ({
+                        ...prev,
+                        location: prev.location === mandi.name ? 'All' : mandi.name
+                      }));
+                      setSearchQuery(''); // Clear search if picking location
+                    }}
+                  >
+                    <View style={[styles.categoryIcon, { backgroundColor: '#E8F5E9' }]}>
+                      <MapPin size={24} color="#2E7D32" />
+                    </View>
+                    <Text style={[styles.categoryName, { marginTop: 8, textAlign: 'center' }]} numberOfLines={2}>
+                      {mandi.name}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                      {mandi.distanceKm} km
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
         {/* Filters and Sort */}
         <View style={styles.controlsContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.filterButton}
             onPress={() => setShowFilters(true)}
           >
@@ -1524,7 +1562,7 @@ export default function MandiPricesScreen() {
           </TouchableOpacity>
 
           <View style={styles.sortContainer}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.sortButton}
               onPress={() => {
                 const sortOptions = ['price', 'name', 'popularity', 'date'];
@@ -1538,8 +1576,8 @@ export default function MandiPricesScreen() {
               </Text>
               <ChevronDown size={16} color="#4CAF50" />
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.sortOrderButton}
               onPress={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
             >
@@ -1594,7 +1632,7 @@ export default function MandiPricesScreen() {
 
       {renderFilterModal()}
       {renderPinModal()}
-    </SafeAreaView>
+    </SafeAreaView >
   );
 }
 

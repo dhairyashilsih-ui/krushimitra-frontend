@@ -239,7 +239,7 @@ class NetworkManager {
   public async getNetworkQuality(): Promise<'excellent' | 'good' | 'fair' | 'poor'> {
     try {
       const state = await NetInfo.fetch();
-      
+
       if (!state.isConnected || !state.isInternetReachable) {
         return 'poor';
       }
@@ -302,8 +302,8 @@ class NetworkManager {
           this.removeCallback(callback);
           resolve(true);
         },
-        onDisconnect: () => {},
-        onReconnect: () => {}
+        onDisconnect: () => { },
+        onReconnect: () => { }
       };
 
       this.addCallback(callback);

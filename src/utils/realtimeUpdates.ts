@@ -69,7 +69,7 @@ class RealTimeUpdateManager {
     this.isConnected = true;
     this.stableSince = Date.now();
     this.reconnectAttempts = 0;
-    
+
     // Simulate real-time updates every 30 seconds
     this.updateInterval = setInterval(() => {
       this.simulatePriceUpdates();
@@ -131,7 +131,7 @@ class RealTimeUpdateManager {
     else if (this.reconnectAttempts === 2) delay = 8000;
     else delay = Math.min(16000 * Math.pow(2, this.reconnectAttempts - 3), 60000);
 
-    debugDedup(`[Realtime] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${Math.round(delay/1000)}s`);
+    debugDedup(`[Realtime] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${Math.round(delay / 1000)}s`);
 
     setTimeout(async () => {
       // Wait additional stability window before actual connect
@@ -223,7 +223,7 @@ class RealTimeUpdateManager {
     // Update cached mandi prices
     offlineStorage.getCachedMandiPrices().then(cachedPrices => {
       if (cachedPrices) {
-        const updatedPrices = cachedPrices.map(price => 
+        const updatedPrices = cachedPrices.map(price =>
           price._id === update.id ? {
             ...price,
             price: update.price,
@@ -257,7 +257,7 @@ class RealTimeUpdateManager {
 
   private addToUpdateQueue(update: MarketUpdate): void {
     this.updateQueue.push(update);
-    
+
     // Keep only last 100 updates to prevent memory issues
     if (this.updateQueue.length > 100) {
       this.updateQueue = this.updateQueue.slice(-100);
@@ -284,7 +284,7 @@ class RealTimeUpdateManager {
   // Public API methods
   public subscribe(type: string, filters: any, callback: (update: any) => void): string {
     const subscriptionId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-    
+
     const subscription: Subscription = {
       id: subscriptionId,
       type,
@@ -371,12 +371,12 @@ class RealTimeUpdateManager {
 
   public disconnect(): void {
     this.isConnected = false;
-    
+
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
-    
+
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
       this.updateInterval = null;
