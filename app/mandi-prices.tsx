@@ -55,7 +55,7 @@ import {
 import * as Location from 'expo-location';
 import { serverManager } from '../src/services/serverManager';
 import { queryLLMStream } from '../src/services/llm'; // AI Service
-import { Bot, Sparkles, MessageCircle, Send, User } from 'lucide-react-native';
+import { Bot, MessageCircle, Send, User } from 'lucide-react-native';
 
 
 interface MandiPrice {
@@ -129,20 +129,20 @@ const CATEGORY_DATA = {
 
 const LOCATIONS = [
   'All',
-  'Kochi',
-  'Thiruvananthapuram',
-  'Kozhikode',
-  'Kottayam',
-  'Thrissur',
-  'Kollam',
-  'Palakkad',
-  'Alappuzha',
-  'Kannur',
-  'Kasaragod',
-  'Pathanamthitta',
-  'Idukki',
-  'Wayanad',
-  'Malappuram'
+  'Gultekdi',
+  'Moshi',
+  'Manchar',
+  'Khed',
+  'Junnar',
+  'Shirur',
+  'Baramati',
+  'Indapur',
+  'Daund',
+  'Bhor',
+  'Saswad',
+  'Velhe',
+  'Mulshi',
+  'Maval'
 ];
 
 const PRICE_RANGES = [
@@ -289,7 +289,7 @@ const MOCK_MANDI_PRICES: MandiPrice[] = [
   {
     _id: '7',
     crop: 'Orange',
-    location: 'Palakkad',
+    location: 'Junnar',
     price: 60,
     date: '2024-01-15T10:30:00Z',
     category: 'Fruits',
@@ -300,7 +300,7 @@ const MOCK_MANDI_PRICES: MandiPrice[] = [
   {
     _id: '8',
     crop: 'Banana',
-    location: 'Alappuzha',
+    location: 'Indapur',
     price: 40,
     date: '2024-01-15T10:30:00Z',
     category: 'Fruits',
@@ -311,7 +311,7 @@ const MOCK_MANDI_PRICES: MandiPrice[] = [
   {
     _id: '9',
     crop: 'Apple',
-    location: 'Idukki',
+    location: 'Gultekdi',
     price: 120,
     date: '2024-01-15T10:30:00Z',
     category: 'Fruits',
@@ -322,7 +322,7 @@ const MOCK_MANDI_PRICES: MandiPrice[] = [
   {
     _id: '10',
     crop: 'Grapes',
-    location: 'Kannur',
+    location: 'Nasik',
     price: 90,
     date: '2024-01-15T10:30:00Z',
     category: 'Fruits',
@@ -334,7 +334,7 @@ const MOCK_MANDI_PRICES: MandiPrice[] = [
   {
     _id: '11',
     crop: 'Wheat',
-    location: 'Kasaragod',
+    location: 'Shirur',
     price: 2400,
     date: '2024-01-15T10:30:00Z',
     category: 'Cereals',
@@ -345,7 +345,7 @@ const MOCK_MANDI_PRICES: MandiPrice[] = [
   {
     _id: '12',
     crop: 'Rice',
-    location: 'Pathanamthitta',
+    location: 'Maval',
     price: 2800,
     date: '2024-01-15T10:30:00Z',
     category: 'Cereals',
@@ -356,7 +356,7 @@ const MOCK_MANDI_PRICES: MandiPrice[] = [
   {
     _id: '13',
     crop: 'Corn',
-    location: 'Wayanad',
+    location: 'Khed',
     price: 1800,
     date: '2024-01-15T10:30:00Z',
     category: 'Cereals',
@@ -366,8 +366,8 @@ const MOCK_MANDI_PRICES: MandiPrice[] = [
   },
   {
     _id: '14',
-    crop: 'Barley',
-    location: 'Malappuram',
+    crop: 'Bajra',
+    location: 'Baramati',
     price: 2200,
     date: '2024-01-15T10:30:00Z',
     category: 'Cereals',
