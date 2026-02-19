@@ -65,12 +65,30 @@
     "agriculturalServices": "Agricultural Services"
   },
   "service": {
-    "cropDisease": { "title": "Crop Disease Detection", "desc": "Upload crop images for instant AI diagnosis" },
-    "activity": { "title": "Activity Tracking", "desc": "Log and monitor farming activities" },
-    "schemes": { "title": "Government Schemes", "desc": "Explore subsidies and benefits" },
-    "mandi": { "title": "Mandi Prices", "desc": "Real-time crop market prices" },
-    "news": { "title": "Farming News", "desc": "Latest agricultural updates" },
-    "carbosafe": { "title": "CarboSafe", "desc": "Earn credits from green farming" }
+    "cropDisease": {
+      "title": "Crop Disease Detection",
+      "desc": "Upload crop images for instant AI diagnosis"
+    },
+    "activity": {
+      "title": "Activity Tracking",
+      "desc": "Log and monitor farming activities"
+    },
+    "schemes": {
+      "title": "Government Schemes",
+      "desc": "Explore subsidies and benefits"
+    },
+    "mandi": {
+      "title": "Mandi Prices",
+      "desc": "Real-time crop market prices"
+    },
+    "news": {
+      "title": "Farming News",
+      "desc": "Latest agricultural updates"
+    },
+    "carbosafe": {
+      "title": "AgriMater",
+      "desc": "AI-powered Farm-to-Retail"
+    }
   },
   "weather": {
     "weekTitle": "7-Day Forecast"
@@ -177,9 +195,19 @@
     },
     "polls": {
       "question1": "Which crop gives best profit this season?",
-      "options1": ["Tomato", "Cotton", "Sugarcane", "Wheat"],
+      "options1": [
+        "Tomato",
+        "Cotton",
+        "Sugarcane",
+        "Wheat"
+      ],
       "question2": "Most effective irrigation method?",
-      "options2": ["Drip", "Sprinkler", "Flood", "Manual"],
+      "options2": [
+        "Drip",
+        "Sprinkler",
+        "Flood",
+        "Manual"
+      ],
       "timeLeft": "time left",
       "days": "days"
     },

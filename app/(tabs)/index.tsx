@@ -1135,8 +1135,23 @@ export default function HomeScreen() {
     router.push('/farming-news');
   };
 
-  const navigateToCarboSafe = () => {
-    router.push('/carbosafe');
+  const openAgriMaterWebsite = () => {
+    // Navigate to AgriMater website
+    // Use React Native Linking if available, or window.open for web
+    if (Platform.OS === 'web') {
+      window.open('https://agrimater.com', '_blank');
+    } else {
+      // For native, we would import Linking, but since this is Expo Router environment, 
+      // we might need to verify Linking import or use a web browser module.
+      // Assuming Linking is not imported yet, let's use a dynamic import or just standard window.open fallback for now if possible? 
+      // Wait, 'react-native' imports are at top. I should verify if Linking is imported. 
+      // If not, I can't use it easily without adding it to imports.
+      // Let's check imports in index.tsx first?
+      // Actually, I can just use router to a specialized webview page or just try to use window.open for web which is the main target right now.
+      // But for completeness:
+      const Linking = require('react-native').Linking;
+      Linking.openURL('https://agrimater.com');
+    }
   };
 
   const openDrawerMenu = () => {
@@ -2644,7 +2659,7 @@ export default function HomeScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={navigateToCarboSafe}>
+            <TouchableOpacity style={[styles.serviceCard, styles.serviceCardLarge]} onPress={openAgriMaterWebsite}>
               <LinearGradient
                 colors={['#F0FDF4', '#DCFCE7', '#BBF7D0']}
                 style={styles.serviceGradient}

@@ -1,5 +1,6 @@
 import { offlineStorage } from './offlineStorage';
 import { networkManager } from './networkManager';
+import { serverManager } from '../services/serverManager';
 import { debugDedup } from './log';
 
 // Real-time update interfaces
@@ -39,8 +40,8 @@ class RealTimeUpdateManager {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private reconnectInterval: number = 10000; // base interval (dynamic backoff applied)
-  private heartbeatInterval: NodeJS.Timeout | null = null;
-  private updateInterval: NodeJS.Timeout | null = null;
+  private heartbeatInterval: any = null;
+  private updateInterval: any = null;
   private lastReconnectAttempt: number = 0; // Track last reconnection time
   private isNetworkFlapping: boolean = false; // Track network instability
   private stableSince: number | null = null; // Track when connection became stable
@@ -70,9 +71,9 @@ class RealTimeUpdateManager {
     this.stableSince = Date.now();
     this.reconnectAttempts = 0;
 
-    // Simulate real-time updates every 30 seconds
+    // Poll for real-time updates every 30 seconds
     this.updateInterval = setInterval(() => {
-      this.simulatePriceUpdates();
+      this.fetchPriceUpdates();
     }, 30000);
 
     debugDedup('[Realtime] Connection established');
@@ -145,57 +146,44 @@ class RealTimeUpdateManager {
     }, delay);
   }
 
-  private simulatePriceUpdates(): void {
-    // Simulate real-time price updates
-    const mockUpdates: PriceUpdate[] = [
-      {
-        id: '1',
-        commodity: 'Tomato',
-        location: 'Kochi',
-        price: 45 + Math.random() * 10 - 5, // Random price between 40-50
-        previousPrice: 45,
-        change: 0,
-        changePercent: 0,
-        timestamp: Date.now(),
-        quality: 'Premium',
-        volume: 1000 + Math.random() * 500
-      },
-      {
-        id: '2',
-        commodity: 'Rice',
-        location: 'Thiruvananthapuram',
-        price: 2800 + Math.random() * 200 - 100, // Random price between 2700-2900
-        previousPrice: 2800,
-        change: 0,
-        changePercent: 0,
-        timestamp: Date.now(),
-        quality: 'Good',
-        volume: 800 + Math.random() * 400
-      },
-      {
-        id: '3',
-        commodity: 'Wheat',
-        location: 'Kozhikode',
-        price: 2400 + Math.random() * 100 - 50, // Random price between 2350-2450
-        previousPrice: 2400,
-        change: 0,
-        changePercent: 0,
-        timestamp: Date.now(),
-        quality: 'Premium',
-        volume: 1200 + Math.random() * 600
-      }
-    ];
+  private async fetchPriceUpdates(): Promise<void> {
+    try {
+      const backendUrl = serverManager.getBackendEndpoint();
+      if (!backendUrl) return;
 
-    // Calculate changes
-    mockUpdates.forEach(update => {
-      update.change = update.price - update.previousPrice;
-      update.changePercent = (update.change / update.previousPrice) * 100;
-    });
+      const response = await fetch(`${backendUrl}/mandis`);
+      if (!response.ok) return;
 
-    // Process each update
-    mockUpdates.forEach(update => {
-      this.processPriceUpdate(update);
-    });
+      const json = await response.json();
+      if (json.status !== 'success' || !Array.isArray(json.data)) return;
+
+      const dbUpdates = json.data;
+      if (dbUpdates.length === 0) return;
+
+      dbUpdates.forEach((item: any) => {
+        // Use realistic price variation if previousPrice is missing
+        const price = Number(item.price);
+        const previousPrice = item.previousPrice ? Number(item.previousPrice) : price;
+        const change = price - previousPrice;
+        const changePercent = previousPrice ? (change / previousPrice) * 100 : 0;
+
+        const update: PriceUpdate = {
+          id: item._id,
+          commodity: item.crop,
+          location: item.location,
+          price: price,
+          previousPrice: previousPrice,
+          change: change,
+          changePercent: changePercent,
+          timestamp: item.date ? new Date(item.date).getTime() : Date.now(),
+          quality: item.quality || 'Standard',
+          volume: item.volume || 1000
+        };
+        this.processPriceUpdate(update);
+      });
+    } catch (error) {
+      debugDedup('[Realtime] Fetch failed', error as any);
+    }
   }
 
   private processPriceUpdate(update: PriceUpdate): void {

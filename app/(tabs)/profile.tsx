@@ -1,30 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Alert, TextInput, Modal, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Alert, TextInput, Modal, Platform, ImageBackground, Image, Dimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { 
-  User, 
-  Phone, 
-  MapPin, 
-  Globe, 
-  Bell, 
-  LogOut, 
-  
-  ChevronRight, 
-  Award, 
-  BarChart3, 
-  Settings, 
-  Shield, 
+import {
+  User,
+  Phone,
+  MapPin,
+  Globe,
+  Bell,
+  LogOut,
+  ChevronRight,
+  Award,
+  BarChart3,
+  Settings,
+  Shield,
   HelpCircle,
   Edit3,
   Smartphone,
   Mountain,
   Layers,
   Wheat,
-  Sparkles
+  Sparkles,
+  Sprout,
+  Tractor,
+  CloudSun
 } from 'lucide-react-native';
+
+const { width } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -197,739 +201,641 @@ export default function ProfileScreen() {
       icon: Bell,
       color: '#FF9800',
       bgColor: '#FFF3E0',
-      onPress: () => {},
+      onPress: () => { },
     },
     {
       id: 'privacy',
       title: 'Privacy & Security',
       subtitle: 'Data protection settings',
       icon: Shield,
-      color: '#4CAF50',
-      bgColor: '#E8F5E8',
-      onPress: () => {},
+      color: '#3B82F6',
+      bgColor: '#E3F2FD',
+      onPress: () => { },
     },
     {
       id: 'general',
       title: t('profile.settings'),
       subtitle: 'App preferences',
       icon: Settings,
-      color: '#4CAF50',
-      bgColor: '#E8F5E8',
-      onPress: () => {},
+      color: '#607D8B',
+      bgColor: '#ECEFF1',
+      onPress: () => { },
     },
   ];
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header with gradient background */}
-        <LinearGradient
-          colors={['#4CAF50', '#2E7D32']}
-          style={styles.header}
-        >
-          {/* Agriculture branding */}
-          <View style={styles.brandingContainer}>
-            <View style={styles.logoContainer}>
-              <Wheat size={24} color="#FFFFFF" />
-              <Sparkles size={16} color="#FF9800" style={styles.sparkleIcon} />
+    <View style={styles.container}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        {/* Modern Header Design */}
+        <View style={styles.headerContainer}>
+          <LinearGradient
+            colors={['#166534', '#15803D', '#16A34A']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.headerGradient}
+          >
+            {/* Pattern Overlay opacity */}
+            <View style={styles.patternOverlay}>
+              <Wheat size={120} color="rgba(255,255,255,0.05)" style={{ position: 'absolute', right: -20, top: -20, transform: [{ rotate: '15deg' }] }} />
+              <Sprout size={80} color="rgba(255,255,255,0.05)" style={{ position: 'absolute', left: -20, bottom: -10, transform: [{ rotate: '-15deg' }] }} />
             </View>
-            <Text style={styles.appName}>KrushiAI Profile</Text>
+
+            <View style={styles.headerContent}>
+              <View style={styles.topBar}>
+                <View style={styles.branding}>
+                  <Text style={styles.appName}>KrushiMitra</Text>
+                  <View style={styles.proBadge}>
+                    <Text style={styles.proText}>PRO</Text>
+                  </View>
+                </View>
+                <TouchableOpacity style={styles.iconBtn} onPress={handleEditProfile}>
+                  <Edit3 size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.profileMain}>
+                <View style={styles.avatarContainer}>
+                  <LinearGradient
+                    colors={['#FFFFFF', '#F0FDF4']}
+                    style={styles.avatarGradient}
+                  >
+                    <User size={40} color="#166534" />
+                  </LinearGradient>
+                  <View style={styles.verifiedBadge}>
+                    <Award size={12} color="#FFFFFF" />
+                  </View>
+                </View>
+                <View style={styles.profileTexts}>
+                  <Text style={styles.userName}>{userData?.name || 'Farmer'}</Text>
+                  <Text style={styles.userLocation}>
+                    <MapPin size={12} color="rgba(255,255,255,0.8)" /> {userData?.location || 'India'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Glassmorphic Stats Bar */}
+              <View style={styles.statsBar}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{userData?.landSize ? userData.landSize.replace(/[^0-9.]/g, '') : '0'}</Text>
+                  <Text style={styles.statLabel}>Acres</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>4.8</Text>
+                  <Text style={styles.statLabel}>Rating</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>12+</Text>
+                  <Text style={styles.statLabel}>Crops</Text>
+                </View>
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
+
+        {/* Floating Farm Card */}
+        <View style={styles.farmCardContainer}>
+          <View style={styles.farmCard}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Farm Details</Text>
+              <TouchableOpacity onPress={handleEditProfile}>
+                <Text style={styles.cardAction}>Update</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.farmDetailsGrid}>
+              <View style={styles.farmDetailItem}>
+                <View style={[styles.farmIconBox, { backgroundColor: '#ECFDF5' }]}>
+                  <Smartphone size={18} color="#059669" />
+                </View>
+                <View>
+                  <Text style={styles.detailLabel}>Mobile</Text>
+                  <Text style={styles.detailValue}>+91 {userData?.phone || '--'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.farmDetailItem}>
+                <View style={[styles.farmIconBox, { backgroundColor: '#FFFBEB' }]}>
+                  <Layers size={18} color="#D97706" />
+                </View>
+                <View>
+                  <Text style={styles.detailLabel}>Soil Type</Text>
+                  <Text style={styles.detailValue}>{userData?.soilType || '--'}</Text>
+                </View>
+              </View>
+            </View>
           </View>
-          
-          <View style={styles.profileSection}>
-            <View style={styles.profilePicture}>
-              <LinearGradient
-                colors={['#FFFFFF', '#F8FAFC']}
-                style={styles.profileGradient}
-              >
-                <User size={32} color="#4CAF50" />
+        </View>
+
+        {/* Dashboard Actions */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Dashboard</Text>
+          <View style={styles.dashboardGrid}>
+            <TouchableOpacity style={styles.dashCard}>
+              <LinearGradient colors={['#F0F9FF', '#E0F2FE']} style={styles.dashGradient}>
+                <CloudSun size={32} color="#0284C7" />
+                <Text style={styles.dashValue}>28°C</Text>
+                <Text style={styles.dashLabel}>Weather</Text>
               </LinearGradient>
-            </View>
-            <Text style={styles.userName}>{userData?.name || 'Farmer'}</Text>
-            <View style={styles.userBadge}>
-              <Text style={styles.userBadgeText}>Verified Farmer</Text>
-            </View>
-            
-            {/* Farming Information */}
-            <View style={styles.farmingInfo}>
-              <View style={styles.farmingInfoRow}>
-                <View style={styles.infoItem}>
-                  <Smartphone size={14} color="rgba(255, 255, 255, 0.8)" />
-                  <Text style={styles.infoLabel}>Phone</Text>
-                  <Text style={styles.infoValue}>+91 {userData?.phone || 'N/A'}</Text>
-                </View>
-                <View style={styles.infoItem}>
-                  <Mountain size={14} color="rgba(255, 255, 255, 0.8)" />
-                  <Text style={styles.infoLabel}>Land Size</Text>
-                  <Text style={styles.infoValue}>{userData?.landSize || 'N/A'}</Text>
-                </View>
-              </View>
-              <View style={styles.farmingInfoRow}>
-                <View style={styles.infoItem}>
-                  <Layers size={14} color="rgba(255, 255, 255, 0.8)" />
-                  <Text style={styles.infoLabel}>Soil Type</Text>
-                  <Text style={styles.infoValue}>{userData?.soilType || 'N/A'}</Text>
-                </View>
-                <View style={styles.infoItem}>
-                  <MapPin size={14} color="rgba(255, 255, 255, 0.8)" />
-                  <Text style={styles.infoLabel}>Location</Text>
-                  <Text style={styles.infoValue}>{userData?.location || 'N/A'}</Text>
-                </View>
-              </View>
-            </View>
-            
-            <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
-              <Edit3 size={16} color="#FFFFFF" />
-              <Text style={styles.editButtonText}>Edit Profile</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.dashCard}>
+              <LinearGradient colors={['#F0FDF4', '#DCFCE7']} style={styles.dashGradient}>
+                <Sprout size={32} color="#16A34A" />
+                <Text style={styles.dashValue}>Healthy</Text>
+                <Text style={styles.dashLabel}>Crop Status</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.dashCard}>
+              <LinearGradient colors={['#FFF7ED', '#FFEDD5']} style={styles.dashGradient}>
+                <Tractor size={32} color="#EA580C" />
+                <Text style={styles.dashValue}>Active</Text>
+                <Text style={styles.dashLabel}>Machinery</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
-        </LinearGradient>
-
-        <View style={styles.detailsContainer}>
-          <Text style={styles.sectionTitle}>Account Overview</Text>
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Full Name</Text>
-              <Text style={styles.infoValueText}>{userData?.name || 'Add your name'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValueText}>{userData?.email || 'Add your email'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Phone</Text>
-              <Text style={styles.infoValueText}>{userData?.phone || 'Add your phone number'}</Text>
-            </View>
-            <View style={[styles.infoRow, styles.infoRowLast]}>
-              <Text style={styles.infoLabel}>Address</Text>
-              <Text style={[styles.infoValueText, styles.infoValueMultiline]} numberOfLines={2}>
-                {userData?.location || 'Allow location access to save your farm address'}
-              </Text>
-            </View>
-          </View>
         </View>
 
-        {/* Enhanced Stats Section */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <LinearGradient
-              colors={['#4CAF50', '#2E7D32']}
-              style={styles.statGradient}
-            >
-              <BarChart3 size={24} color="#FFFFFF" />
-              <Text style={styles.statNumber}>24</Text>
-              <Text style={styles.statLabel}>Activities</Text>
-            </LinearGradient>
-          </View>
-          <View style={styles.statCard}>
-            <LinearGradient
-              colors={['#4CAF50', '#2E7D32']}
-              style={styles.statGradient}
-            >
-              <Text style={styles.statNumber}>5</Text>
-              <Text style={styles.statLabel}></Text>
-            </LinearGradient>
-          </View>
-          <View style={styles.statCard}>
-            <LinearGradient
-              colors={['#FF9800', '#F57C00']}
-              style={styles.statGradient}
-            >
-              <User size={24} color="#FFFFFF" />
-              <Text style={styles.statNumber}>12</Text>
-              <Text style={styles.statLabel}>AI Queries</Text>
-            </LinearGradient>
-          </View>
-        </View>
-
-        {/* Enhanced Menu Section */}
-        <View style={styles.menuContainer}>
-          <Text style={styles.sectionTitle}>Settings</Text>
-          {menuItems.map((item) => {
-            const IconComponent = item.icon;
-            return (
-              <TouchableOpacity key={item.id} style={styles.menuItem} onPress={item.onPress}>
-                <View style={styles.menuItemLeft}>
-                  <View style={[styles.menuItemIcon, { backgroundColor: item.bgColor }]}>
+        {/* Settings Menu */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Preferences</Text>
+          <View style={styles.menuContainer}>
+            {menuItems.map((item, index) => {
+              const IconComponent = item.icon;
+              return (
+                <TouchableOpacity key={item.id} style={styles.menuItem} onPress={item.onPress}>
+                  <View style={[styles.menuIconBox, { backgroundColor: item.bgColor }]}>
                     <IconComponent size={20} color={item.color} />
                   </View>
-                  <View style={styles.menuItemText}>
-                    <Text style={styles.menuItemTitle}>{item.title}</Text>
-                    <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
+                  <View style={styles.menuContent}>
+                    <Text style={styles.menuTitle}>{item.title}</Text>
+                    <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
                   </View>
-                </View>
-                <ChevronRight size={20} color="#D1D5DB" />
-              </TouchableOpacity>
-            );
-          })}
+                  <ChevronRight size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
-        {/* Enhanced Support Section */}
-        <View style={styles.menuContainer}>
-          <Text style={styles.sectionTitle}>Support & Help</Text>
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuItemLeft}>
-              <View style={[styles.menuItemIcon, { backgroundColor: '#FFF3E0' }]}>
-                <Phone size={20} color="#FF9800" />
+        {/* Support Section */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Support</Text>
+          <View style={styles.menuContainer}>
+            <TouchableOpacity style={styles.menuItem}>
+              <View style={[styles.menuIconBox, { backgroundColor: '#FEE2E2' }]}>
+                <Phone size={20} color="#EF4444" />
               </View>
-              <View style={styles.menuItemText}>
-                <Text style={styles.menuItemTitle}>Kisan Call Center</Text>
-                <Text style={styles.menuItemSubtitle}>1800-180-1551 (24/7 Support)</Text>
+              <View style={styles.menuContent}>
+                <Text style={styles.menuTitle}>Kisan Helpline</Text>
+                <Text style={styles.menuSubtitle}>1800-180-1551</Text>
               </View>
-            </View>
-            <ChevronRight size={20} color="#D1D5DB" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuItemLeft}>
-              <View style={[styles.menuItemIcon, { backgroundColor: '#E8F5E8' }]}>
-                <HelpCircle size={20} color="#4CAF50" />
-              </View>
-              <View style={styles.menuItemText}>
-                <Text style={styles.menuItemTitle}>Help & FAQ</Text>
-                <Text style={styles.menuItemSubtitle}>Get answers to common questions</Text>
-              </View>
-            </View>
-            <ChevronRight size={20} color="#D1D5DB" />
-          </TouchableOpacity>
+              <ChevronRight size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Enhanced Logout Button */}
-        <View style={styles.logoutContainer}>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <LinearGradient
-              colors={['#FEE2E2', '#FECACA']}
-              style={styles.logoutGradient}
-            >
-              <LogOut size={20} color="#EF4444" />
-              <Text style={styles.logoutText}>Sign Out</Text>
-            </LinearGradient>
+        {/* Logout Button */}
+        <View style={styles.logoutWrapper}>
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+            <LogOut size={20} color="#EF4444" />
+            <Text style={styles.logoutTxt}>Log Out</Text>
           </TouchableOpacity>
+          <Text style={styles.versionTxt}>v1.0.0 • KrushiMitra</Text>
         </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.versionText}>KrushiAI v1.0.0</Text>
-          <Text style={styles.copyrightText}>© 2024 Smart India Hackathon</Text>
-        </View>
       </ScrollView>
-      
-      {/* Edit Profile Modal */}
+
+      {/* Edit Profile Modal (Kept functional logic, updated styles) */}
       <Modal visible={showEditModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <LinearGradient
-              colors={['#FFFFFF', '#F1F8E9']}
-              style={styles.modalContent}
-            >
-              <View style={styles.modalHeader}>
-                <View style={styles.modalTitleContainer}>
-                  <Wheat size={20} color="#4CAF50" />
-                  <Text style={styles.modalTitle}>Edit Profile</Text>
-                </View>
-                <TouchableOpacity 
-                  onPress={() => setShowEditModal(false)}
-                  style={styles.modalCloseButton}
-                >
-                  <Text style={styles.modalCloseText}>×</Text>
-                </TouchableOpacity>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalHeading}>Edit Profile</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <Text style={styles.closeModalText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Full Name</Text>
+                <TextInput
+                  style={styles.inputField}
+                  value={editData.name}
+                  onChangeText={(text) => setEditData({ ...editData, name: text })}
+                  placeholder="Enter name"
+                />
               </View>
-              
-              <ScrollView style={styles.modalFields}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Full Name</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={editData.name}
-                    onChangeText={(text) => setEditData({...editData, name: text})}
-                    placeholder="Enter your full name"
-                  />
-                </View>
-                
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Phone Number</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={editData.phone}
-                    onChangeText={(text) => setEditData({...editData, phone: text})}
-                    placeholder="Enter phone number"
-                    keyboardType="numeric"
-                  />
-                </View>
-                
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Land Size</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={editData.landSize}
-                    onChangeText={(text) => setEditData({...editData, landSize: text})}
-                    placeholder="e.g., 5.2 acres"
-                  />
-                </View>
-                
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Soil Type</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={editData.soilType}
-                    onChangeText={(text) => setEditData({...editData, soilType: text})}
-                    placeholder="e.g., Black Cotton Soil"
-                  />
-                </View>
-                
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Location</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={editData.location}
-                    onChangeText={(text) => setEditData({...editData, location: text})}
-                    placeholder="City, State"
-                  />
-                </View>
-              </ScrollView>
-              
-              <View style={styles.modalActions}>
-                <TouchableOpacity 
-                  style={styles.modalCancelButton} 
-                  onPress={() => setShowEditModal(false)}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.modalSaveButton} onPress={saveProfile}>
-                  <LinearGradient
-                    colors={['#4CAF50', '#2E7D32']}
-                    style={styles.modalSaveGradient}
-                  >
-                    <Text style={styles.modalSaveText}>Save Changes</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Phone Number</Text>
+                <TextInput
+                  style={styles.inputField}
+                  value={editData.phone}
+                  onChangeText={(text) => setEditData({ ...editData, phone: text })}
+                  placeholder="Enter phone"
+                  keyboardType="numeric"
+                />
               </View>
-            </LinearGradient>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Land Size (Acres)</Text>
+                <TextInput
+                  style={styles.inputField}
+                  value={editData.landSize}
+                  onChangeText={(text) => setEditData({ ...editData, landSize: text })}
+                  placeholder="e.g. 5.5"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Soil Type</Text>
+                <TextInput
+                  style={styles.inputField}
+                  value={editData.soilType}
+                  onChangeText={(text) => setEditData({ ...editData, soilType: text })}
+                  placeholder="e.g. Black Soil"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Location</Text>
+                <TextInput
+                  style={styles.inputField}
+                  value={editData.location}
+                  onChangeText={(text) => setEditData({ ...editData, location: text })}
+                  placeholder="City, State"
+                />
+              </View>
+            </ScrollView>
+            <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
+              <Text style={styles.saveBtnText}>Save Changes</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F1F8E9',
+    backgroundColor: '#F8FAFC',
   },
   scrollView: {
     flex: 1,
   },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 30,
-    paddingHorizontal: 24,
+  headerContainer: {
+    height: 280,
+    backgroundColor: '#166534',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    overflow: 'hidden',
+    shadowColor: '#166534',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
-  brandingContainer: {
+  headerGradient: {
+    flex: 1,
+    paddingTop: Platform.OS === 'android' ? 40 : 0,
+    paddingHorizontal: 20,
+  },
+  patternOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  headerContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingBottom: 40,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  branding: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    gap: 12,
-  },
-  logoContainer: {
-    position: 'relative',
-    width: 40,
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sparkleIcon: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
+    gap: 8,
   },
   appName: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+    letterSpacing: 0.5,
   },
-  profileSection: {
-    alignItems: 'center',
+  proBadge: {
+    backgroundColor: '#FCD34D',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
-  profilePicture: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+  proText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#78350F',
   },
-  profileGradient: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 50,
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  profileMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  avatarContainer: {
+    position: 'relative',
+  },
+  avatarGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  verifiedBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#3B82F6',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  profileTexts: {
+    flex: 1,
   },
   userName: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+    marginBottom: 4,
   },
-  userBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 16,
-    gap: 6,
-  },
-  userBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FCD34D',
-  },
-  userDetails: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailText: {
+  userLocation: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: 'rgba(255,255,255,0.8)',
   },
-  statsContainer: {
+  statsBar: {
     flexDirection: 'row',
-    padding: 20,
-    gap: 12,
-  },
-  detailsContainer: {
-    paddingHorizontal: 20,
-    marginTop: -30,
-    marginBottom: 12,
-  },
-  infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    shadowColor: '#000000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 16,
+    padding: 16,
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomColor: '#E5E7EB',
-    borderBottomWidth: 1,
-  },
-  infoRowLast: {
-    borderBottomWidth: 0,
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '600',
-  },
-  infoValueText: {
-    fontSize: 15,
-    color: '#111827',
-    fontWeight: '600',
-    flex: 1,
-    textAlign: 'right',
-    marginLeft: 16,
-  },
-  infoValueMultiline: {
-    lineHeight: 20,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  statGradient: {
-    padding: 20,
-    borderRadius: 16,
     alignItems: 'center',
-    gap: 8,
+    backdropFilter: 'blur(10px)', // Works on web, ignored on native
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  statNumber: {
-    fontSize: 24,
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
   statLabel: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'center',
-    fontWeight: '500',
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 2,
   },
-  menuContainer: {
+  statDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  farmCardContainer: {
     paddingHorizontal: 20,
-    marginBottom: 24,
+    marginTop: -30,
+    zIndex: 10,
+  },
+  farmCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E293B',
+  },
+  cardAction: {
+    fontSize: 14,
+    color: '#166534',
+    fontWeight: '600',
+  },
+  farmDetailsGrid: {
+    gap: 16,
+  },
+  farmDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  farmIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  detailValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  sectionContainer: {
+    paddingHorizontal: 20,
+    marginTop: 24,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#0F172A',
     marginBottom: 16,
-    paddingLeft: 4,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  dashboardGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  dashCard: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dashGradient: {
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 110,
+  },
+  dashValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E293B',
+  },
+  dashLabel: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  menuContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 8,
   },
   menuItem: {
-    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 18,
-    borderRadius: 16,
-    marginBottom: 12,
-    shadowColor: '#4CAF50',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(76, 175, 80, 0.1)',
+    padding: 12,
+    gap: 16,
   },
-  menuItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  menuItemIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  menuIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
   },
-  menuItemText: {
+  menuContent: {
     flex: 1,
   },
-  menuItemTitle: {
-    fontSize: 16,
+  menuTitle: {
+    fontSize: 15,
     fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
+    color: '#334155',
   },
-  menuItemSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 18,
-  },
-  logoutContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  logoutButton: {
-    borderRadius: 16,
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  logoutGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 18,
-    borderRadius: 16,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
-  },
-  logoutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#EF4444',
-  },
-  footer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-    gap: 4,
-  },
-  versionText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  copyrightText: {
+  menuSubtitle: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#94A3B8',
+    marginTop: 2,
   },
-  // Enhanced Farming Info Styles
-  farmingInfo: {
-    width: '100%',
-    marginTop: 16,
-    gap: 12,
-  },
-  farmingInfoRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  infoItem: {
-    flex: 1,
+  logoutWrapper: {
+    padding: 20,
     alignItems: 'center',
-    gap: 4,
+    marginTop: 10,
   },
-  infoLabel: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  infoValue: {
-    fontSize: 13,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  editButton: {
+  logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 24,
   },
-  editButtonText: {
-    fontSize: 14,
-    color: '#FFFFFF',
+  logoutTxt: {
+    color: '#EF4444',
     fontWeight: '600',
+    fontSize: 16,
+  },
+  versionTxt: {
+    marginTop: 16,
+    color: '#94A3B8',
+    fontSize: 12,
   },
   // Modal styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
   },
   modalContainer: {
-    width: '90%',
-    maxHeight: '80%',
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '80%',
     padding: 24,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  modalTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  modalTitle: {
+  modalHeading: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#1F2937',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+    color: '#0F172A',
   },
-  modalCloseButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
+  closeModalText: {
+    color: '#64748B',
+    fontSize: 16,
   },
-  modalCloseText: {
-    fontSize: 18,
-    color: '#6B7280',
-    fontWeight: 'bold',
-  },
-  modalFields: {
-    maxHeight: 300,
+  modalBody: {
+    flex: 1,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   inputLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: '#334155',
     marginBottom: 8,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
-  modalInput: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
+  inputField: {
+    backgroundColor: '#F1F5F9',
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 16,
     fontSize: 16,
-    color: '#1F2937',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+    color: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
+  saveBtn: {
+    backgroundColor: '#166534',
+    padding: 18,
+    borderRadius: 16,
+    alignItems: 'center',
     marginTop: 20,
   },
-  modalCancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-  },
-  modalCancelText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
-  },
-  modalSaveButton: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  modalSaveGradient: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  modalSaveText: {
-    fontSize: 16,
-    fontWeight: '600',
+  saveBtnText: {
     color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
