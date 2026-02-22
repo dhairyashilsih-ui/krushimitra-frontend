@@ -151,7 +151,7 @@ class RealTimeUpdateManager {
       const backendUrl = serverManager.getBackendEndpoint();
       if (!backendUrl) return;
 
-      const response = await fetch(`${backendUrl}/mandis`);
+      const response = await fetch(`${backendUrl}/mandiprices`);
       if (!response.ok) return;
 
       const json = await response.json();
