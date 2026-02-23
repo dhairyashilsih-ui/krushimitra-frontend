@@ -71,6 +71,7 @@ interface AnalysisResult {
   disease_detection: DiseaseDetection;
   ai_solution?: AISolution;
   message?: string;
+  error?: string;
   crop?: string;
 }
 
@@ -256,11 +257,9 @@ export default function CropDiseaseDetectionScreen() {
 
       // Ensure animation has reached at least step 4 before showing result
       setTimeout(() => {
+        setAnalysisResult(data);
         if (data.success) {
-          setAnalysisResult(data);
           Vibration.vibrate(100); // Haptic feedback on success
-        } else {
-          Alert.alert('Analysis Failed', data.message || 'Could not analyze image.');
         }
         setIsScanning(false);
       }, 500);
@@ -312,7 +311,7 @@ export default function CropDiseaseDetectionScreen() {
     }
   };
 
-  const hasDisease = analysisResult?.disease_detection.disease !== 'Healthy';
+  const hasDisease = analysisResult?.disease_detection?.disease !== 'Healthy';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -443,78 +442,100 @@ export default function CropDiseaseDetectionScreen() {
           {/* Results Section (Sequential Reveal) */}
           {analysisResult && (
             <View style={styles.resultsSection}>
-
-              {/* 1. STATUS HEADER */}
-              <Animated.View style={{ opacity: resultHeaderAnim, transform: [{ translateY: resultHeaderAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
-                <LinearGradient
-                  colors={hasDisease ? ['#FEF2F2', '#FEE2E2'] : ['#F1F8E9', '#DCFCE7']}
-                  style={[styles.statusCard, hasDisease ? styles.statusDanger : styles.statusSuccess]}
-                >
-                  <View style={styles.statusIconContainer}>
-                    {hasDisease ? <Bug size={24} color="#EF4444" /> : <Sparkles size={24} color="#4CAF50" />}
-                  </View>
-                  <View style={styles.statusTextContainer}>
-                    <Text style={styles.statusTitle}>
-                      {analysisResult.disease_detection.disease}
-                    </Text>
-                    <Text style={styles.statusSubtitle}>
-                      {analysisResult.plant_identification.plant_common} • {(analysisResult.disease_detection.confidence * 100).toFixed(0)}% Confidence
-                    </Text>
-                  </View>
-                </LinearGradient>
-              </Animated.View>
-
-              {/* 2. DETAILS & AI SOLUTION */}
-              <Animated.View style={{ opacity: resultDetailsAnim, transform: [{ translateY: resultDetailsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
-                <View style={styles.detailsCard}>
-                  <View style={[styles.detailRow, { borderBottomWidth: 1, borderBottomColor: '#F0F0F0', paddingBottom: 12 }]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Activity size={18} color="#3B82F6" />
-                      <Text style={styles.sectionHeader}>Diagnosis Report</Text>
+              {!analysisResult.success ? (
+                /* ERROR CARD */
+                <Animated.View style={{ opacity: resultHeaderAnim, transform: [{ translateY: resultHeaderAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+                  <LinearGradient
+                    colors={['#FEF2F2', '#FEE2E2']}
+                    style={[styles.statusCard, styles.statusDanger]}
+                  >
+                    <View style={styles.statusIconContainer}>
+                      <Bug size={32} color="#EF4444" />
                     </View>
-                    <View style={styles.aiTag}>
-                      <BrainCircuit size={12} color="#D97706" />
-                      <Text style={styles.aiTagText}>AI Analysis</Text>
+                    <View style={styles.statusTextContainer}>
+                      <Text style={styles.statusTitle}>Analysis Failed</Text>
+                      <Text style={[styles.statusSubtitle, { color: '#B91C1C', marginTop: 4, textTransform: 'none', fontSize: 14 }]}>
+                        {analysisResult.message || 'We could not detect a valid crop leaf in this image. Please try another photo.'}
+                      </Text>
                     </View>
-                  </View>
+                  </LinearGradient>
+                </Animated.View>
+              ) : (
+                /* SUCCESS BLOCKS */
+                <>
+                  {/* 1. STATUS HEADER */}
+                  <Animated.View style={{ opacity: resultHeaderAnim, transform: [{ translateY: resultHeaderAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+                    <LinearGradient
+                      colors={hasDisease ? ['#FEF2F2', '#FEE2E2'] : ['#F1F8E9', '#DCFCE7']}
+                      style={[styles.statusCard, hasDisease ? styles.statusDanger : styles.statusSuccess]}
+                    >
+                      <View style={styles.statusIconContainer}>
+                        {hasDisease ? <Bug size={24} color="#EF4444" /> : <Sparkles size={24} color="#4CAF50" />}
+                      </View>
+                      <View style={styles.statusTextContainer}>
+                        <Text style={styles.statusTitle}>
+                          {analysisResult.disease_detection.disease}
+                        </Text>
+                        <Text style={styles.statusSubtitle}>
+                          {analysisResult.plant_identification.plant_common} • {(analysisResult.disease_detection.confidence * 100).toFixed(0)}% Confidence
+                        </Text>
+                      </View>
+                    </LinearGradient>
+                  </Animated.View>
 
-                  {/* Treatment / Advice */}
-                  <View style={styles.adviceSection}>
-                    {analysisResult.ai_solution ? (
-                      <>
-                        <View style={styles.adviceBlock}>
-                          <Text style={styles.adviceLabel}>🔬 Treatment</Text>
-                          <Text style={styles.adviceText}>{analysisResult.ai_solution.treatment}</Text>
+                  {/* 2. DETAILS & AI SOLUTION */}
+                  <Animated.View style={{ opacity: resultDetailsAnim, transform: [{ translateY: resultDetailsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+                    <View style={styles.detailsCard}>
+                      <View style={[styles.detailRow, { borderBottomWidth: 1, borderBottomColor: '#F0F0F0', paddingBottom: 12 }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Activity size={18} color="#3B82F6" />
+                          <Text style={styles.sectionHeader}>Diagnosis Report</Text>
                         </View>
+                        <View style={styles.aiTag}>
+                          <BrainCircuit size={12} color="#D97706" />
+                          <Text style={styles.aiTagText}>AI Analysis</Text>
+                        </View>
+                      </View>
 
-                        {analysisResult.ai_solution.prevention.length > 0 && (
-                          <View style={styles.adviceBlock}>
-                            <Text style={styles.adviceLabel}>🛡️ Prevention</Text>
-                            {analysisResult.ai_solution.prevention.map((tip, idx) => (
-                              <View key={idx} style={styles.checkListItem}>
-                                <CheckCircle size={14} color="#4CAF50" style={{ marginTop: 2 }} />
-                                <Text style={styles.listText}>{tip}</Text>
+                      {/* Treatment / Advice */}
+                      <View style={styles.adviceSection}>
+                        {analysisResult.ai_solution ? (
+                          <>
+                            <View style={styles.adviceBlock}>
+                              <Text style={styles.adviceLabel}>🔬 Treatment</Text>
+                              <Text style={styles.adviceText}>{analysisResult.ai_solution.treatment}</Text>
+                            </View>
+
+                            {analysisResult.ai_solution.prevention.length > 0 && (
+                              <View style={styles.adviceBlock}>
+                                <Text style={styles.adviceLabel}>🛡️ Prevention</Text>
+                                {analysisResult.ai_solution.prevention.map((tip, idx) => (
+                                  <View key={idx} style={styles.checkListItem}>
+                                    <CheckCircle size={14} color="#4CAF50" style={{ marginTop: 2 }} />
+                                    <Text style={styles.listText}>{tip}</Text>
+                                  </View>
+                                ))}
                               </View>
-                            ))}
-                          </View>
-                        )}
+                            )}
 
-                        <View style={styles.tipsBox}>
-                          <View style={styles.tipHeader}>
-                            <Zap size={14} color="#F59E0B" />
-                            <Text style={styles.tipsBoxTitle}>Pro Tip</Text>
-                          </View>
-                          <Text style={styles.tipsBoxText}>
-                            {analysisResult.ai_solution.tips[0] || "Regular monitoring is key to healthy crops."}
-                          </Text>
-                        </View>
-                      </>
-                    ) : (
-                      <Text style={styles.adviceText}>{analysisResult.disease_detection.details || "No specific advice available."}</Text>
-                    )}
-                  </View>
-                </View>
-              </Animated.View>
+                            <View style={styles.tipsBox}>
+                              <View style={styles.tipHeader}>
+                                <Zap size={14} color="#F59E0B" />
+                                <Text style={styles.tipsBoxTitle}>Pro Tip</Text>
+                              </View>
+                              <Text style={styles.tipsBoxText}>
+                                {analysisResult.ai_solution.tips[0] || "Regular monitoring is key to healthy crops."}
+                              </Text>
+                            </View>
+                          </>
+                        ) : (
+                          <Text style={styles.adviceText}>{analysisResult.disease_detection.details || "No specific advice available."}</Text>
+                        )}
+                      </View>
+                    </View>
+                  </Animated.View>
+                </>
+              )}
             </View>
           )}
 
