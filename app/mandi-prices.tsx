@@ -167,9 +167,8 @@ const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
       try {
         const queryName = mandi.name;
 
-        let apiUrl = `http://192.168.0.103:3001/api/mandi-prices?mandiName=${encodeURIComponent(queryName)}`;
-        // Fallback to production URL if needed, but assuming dev env for now
-        // apiUrl = `https://krushimitra2-0-backend.onrender.com/api/mandi-prices?mandiName...`
+        // Use production backend URL to avoid mixed content (HTTPS -> HTTP) and local IP issues
+        const apiUrl = `https://krushimitra2-0-backend.onrender.com/api/mandi-prices?mandiName=${encodeURIComponent(queryName)}`;
 
         const response = await fetch(apiUrl);
         if (!response.ok) throw new Error('API fetch failed');
