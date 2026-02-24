@@ -165,10 +165,12 @@ const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
     if (!expanded && mandiPrices.length === 0) {
       setLoadingPrices(true);
       try {
-        const queryName = mandi.name;
+        // Get the first word of the mandi to allow fuzzy matching on the backend 
+        // e.g., "Pimpri Sub-Market" -> "Pimpri"
+        const queryName = mandi.name.split(' ')[0] || mandi.name;
 
-        // Use production backend URL to avoid mixed content (HTTPS -> HTTP) and local IP issues
-        const apiUrl = `https://krushimitra2-0-backend.onrender.com/api/mandi-prices?mandiName=${encodeURIComponent(queryName)}`;
+        // Use production backend URL. The deployed backend uses `/mandis` not `/api/mandi-prices`
+        const apiUrl = `https://krushimitra2-0-backend.onrender.com/mandis?location=${encodeURIComponent(queryName)}`;
 
         const response = await fetch(apiUrl);
         if (!response.ok) throw new Error('API fetch failed');
