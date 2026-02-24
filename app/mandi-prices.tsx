@@ -169,8 +169,8 @@ const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
         // e.g., "Pimpri Sub-Market" -> "Pimpri"
         const queryName = mandi.name.split(' ')[0] || mandi.name;
 
-        // Use production backend URL. The deployed backend uses `/mandis` not `/api/mandi-prices`
-        const apiUrl = `https://krushimitra2-0-backend.onrender.com/mandis?location=${encodeURIComponent(queryName)}`;
+        // Use production backend URL. The deployed backend uses `/mandiprices`
+        const apiUrl = `https://krushimitra2-0-backend.onrender.com/mandiprices?location=${encodeURIComponent(queryName)}`;
 
         const response = await fetch(apiUrl);
         if (!response.ok) throw new Error('API fetch failed');
