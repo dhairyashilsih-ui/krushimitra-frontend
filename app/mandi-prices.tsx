@@ -159,32 +159,22 @@ const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
   const [expanded, setExpanded] = useState(false);
   const [mandiPrices, setMandiPrices] = useState<MandiPrice[]>([]);
   const [loadingPrices, setLoadingPrices] = useState(false);
-  const [dataDateStatus, setDataDateStatus] = useState("Prices verified with data.gov.in");
 
   const toggleExpand = async () => {
     if (!expanded && mandiPrices.length === 0) {
       setLoadingPrices(true);
       try {
-        // Get the first word of the mandi to allow fuzzy matching on the backend 
-        // e.g., "Pimpri Sub-Market" -> "Pimpri"
-        const queryName = mandi.name.split(' ')[0] || mandi.name;
+        // Simulate fetching prices for this specific mandi
+        await new Promise(resolve => setTimeout(resolve, 600)); // Fake network delay
 
-        // Use production backend URL. The deployed backend uses `/mandiprices`
-        const apiUrl = `https://krushimitra2-0-backend.onrender.com/mandiprices?location=${encodeURIComponent(queryName)}`;
+        // Simple mock filter logic using the global MOCK_MANDI_PRICES
+        const locationSpecific = MOCK_MANDI_PRICES.filter(p =>
+          mandi.name.includes(p.location) || p.location === 'Pune'
+        );
 
-        const response = await fetch(apiUrl);
-        if (!response.ok) throw new Error('API fetch failed');
-        const result = await response.json();
-
-        if (result.status === 'success') {
-          setDataDateStatus(result.dataDateStatus || "Prices verified currently");
-          setMandiPrices(result.data || []);
-        } else {
-          throw new Error(result.message || 'Error from backend');
-        }
-
+        setMandiPrices(locationSpecific.length > 0 ? locationSpecific : MOCK_MANDI_PRICES.slice(0, 3));
       } catch (e) {
-        console.error('Error fetching real mandi prices:', e);
+        console.error(e);
       } finally {
         setLoadingPrices(false);
       }
@@ -276,13 +266,17 @@ const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
                   </View>
                 </View>
               ))}
-              <View
+              <TouchableOpacity
                 style={{
                   padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E5E7EB'
                 }}
+                onPress={() => router.push({
+                  pathname: '/mandi-report',
+                  params: { mandiName: mandi.name, distance: mandi.distanceKm }
+                })}
               >
-                <Text style={{ color: '#9CA3AF', fontSize: 12 }}>{dataDateStatus}</Text>
-              </View>
+                <Text style={{ color: '#4CAF50', fontWeight: '600', fontSize: 14 }}>View Full Report</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -291,7 +285,239 @@ const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
   );
 };
 
-// Mock data removed in favor of real API data
+// Mock data for demonstration
+const MOCK_MANDI_PRICES: MandiPrice[] = [
+  { _id: '1', crop: 'Tomato (Hybrid)', location: 'Gultekdi Market Yard', price: 2400, date: '2024-03-20', category: 'Vegetables', unit: 'per Quintal', change: 200, changePercent: 5.2, quality: 'Grade A' },
+  { _id: '2', crop: 'Onion (Red)', location: 'Lasalgaon Mandi', price: 1800, date: '2024-03-20', category: 'Vegetables', unit: 'per Quintal', change: -150, changePercent: -4.1, quality: 'Click to see details' },
+  { _id: '3', crop: 'Wheat (Lokwan)', location: 'MPMC Vashi', price: 3200, date: '2024-03-19', category: 'Cereals', unit: 'per Quintal', change: 0, changePercent: 0, quality: 'Premium' },
+  { _id: '4', crop: 'Soybean', location: 'Latur APMC', price: 4600, date: '2024-03-19', category: 'Pulses', unit: 'per Quintal', change: 100, changePercent: 2.1, quality: 'FAQ' },
+  { _id: '5', crop: 'Cotton', location: 'Akola Market', price: 6800, date: '2024-03-18', category: 'Cash Crops', unit: 'per Quintal', change: -50, changePercent: -0.8, quality: 'Long Staple' },
+  { _id: '6', crop: 'Potato', location: 'Pune', price: 1500, date: '2024-03-20', category: 'Vegetables', unit: 'per Quintal', change: 50, changePercent: 3.4 },
+  {
+    _id: '7',
+    crop: 'Orange',
+    location: 'Junnar',
+    price: 60,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Fruits',
+    unit: 'per kg',
+    change: 5,
+    changePercent: 9.1
+  },
+  {
+    _id: '8',
+    crop: 'Banana',
+    location: 'Indapur',
+    price: 40,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Fruits',
+    unit: 'per kg',
+    change: 2,
+    changePercent: 5.3
+  },
+  {
+    _id: '9',
+    crop: 'Apple',
+    location: 'Gultekdi',
+    price: 120,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Fruits',
+    unit: 'per kg',
+    change: -5,
+    changePercent: -4.0
+  },
+  {
+    _id: '10',
+    crop: 'Grapes',
+    location: 'Nasik',
+    price: 90,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Fruits',
+    unit: 'per kg',
+    change: 8,
+    changePercent: 9.8
+  },
+  // Cereals
+  {
+    _id: '11',
+    crop: 'Wheat',
+    location: 'Shirur',
+    price: 2400,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Cereals',
+    unit: 'per quintal',
+    change: 50,
+    changePercent: 2.1
+  },
+  {
+    _id: '12',
+    crop: 'Rice',
+    location: 'Maval',
+    price: 2800,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Cereals',
+    unit: 'per quintal',
+    change: 25,
+    changePercent: 0.9
+  },
+  {
+    _id: '13',
+    crop: 'Corn',
+    location: 'Khed',
+    price: 1800,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Cereals',
+    unit: 'per quintal',
+    change: 30,
+    changePercent: 1.7
+  },
+  {
+    _id: '14',
+    crop: 'Bajra',
+    location: 'Baramati',
+    price: 2200,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Cereals',
+    unit: 'per quintal',
+    change: -20,
+    changePercent: -0.9
+  },
+  // Pulses
+  {
+    _id: '15',
+    crop: 'Soybean',
+    location: 'Pune',
+    price: 5200,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Pulses',
+    unit: 'per quintal',
+    change: -100,
+    changePercent: -1.9
+  },
+  {
+    _id: '16',
+    crop: 'Chickpea',
+    location: 'Nagpur',
+    price: 4800,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Pulses',
+    unit: 'per quintal',
+    change: 80,
+    changePercent: 1.7
+  },
+  {
+    _id: '17',
+    crop: 'Lentil',
+    location: 'Mumbai',
+    price: 4200,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Pulses',
+    unit: 'per quintal',
+    change: 60,
+    changePercent: 1.4
+  },
+  {
+    _id: '18',
+    crop: 'Black Gram',
+    location: 'Kolhapur',
+    price: 5600,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Pulses',
+    unit: 'per quintal',
+    change: -40,
+    changePercent: -0.7
+  },
+  // Nuts & Seeds
+  {
+    _id: '19',
+    crop: 'Groundnut',
+    location: 'Kolhapur',
+    price: 6800,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Nuts & Seeds',
+    unit: 'per quintal',
+    change: 200,
+    changePercent: 3.0
+  },
+  {
+    _id: '20',
+    crop: 'Almond',
+    location: 'Nashik',
+    price: 450,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Nuts & Seeds',
+    unit: 'per kg',
+    change: 15,
+    changePercent: 3.4
+  },
+  {
+    _id: '21',
+    crop: 'Cashew',
+    location: 'Mumbai',
+    price: 380,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Nuts & Seeds',
+    unit: 'per kg',
+    change: -10,
+    changePercent: -2.6
+  },
+  {
+    _id: '22',
+    crop: 'Sunflower Seeds',
+    location: 'Pune',
+    price: 3200,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Nuts & Seeds',
+    unit: 'per quintal',
+    change: 50,
+    changePercent: 1.6
+  },
+  // Spices & Herbs
+  {
+    _id: '23',
+    crop: 'Turmeric',
+    location: 'Sangli',
+    price: 12000,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Spices & Herbs',
+    unit: 'per quintal',
+    change: -500,
+    changePercent: -4.0
+  },
+  {
+    _id: '24',
+    crop: 'Chili',
+    location: 'Kolhapur',
+    price: 18000,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Spices & Herbs',
+    unit: 'per quintal',
+    change: 800,
+    changePercent: 4.6
+  },
+  {
+    _id: '25',
+    crop: 'Cumin',
+    location: 'Pune',
+    price: 15000,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Spices & Herbs',
+    unit: 'per quintal',
+    change: 300,
+    changePercent: 2.0
+  },
+  {
+    _id: '26',
+    crop: 'Coriander',
+    location: 'Mumbai',
+    price: 8500,
+    date: '2024-01-15T10:30:00Z',
+    category: 'Spices & Herbs',
+    unit: 'per quintal',
+    change: -200,
+    changePercent: -2.3
+  }
+];
 
 export default function MandiPricesScreen() {
   const { t } = useTranslation();
@@ -613,8 +839,11 @@ export default function MandiPricesScreen() {
         setFilteredPrices(cachedPrices);
         console.log('Loaded cached prices:', cachedPrices.length);
       } else {
-        setPrices([]);
-        setFilteredPrices([]);
+        // Fallback to mock data
+        setPrices(MOCK_MANDI_PRICES);
+        setFilteredPrices(MOCK_MANDI_PRICES);
+        // Cache the mock data
+        await offlineStorage.cacheMandiPrices(MOCK_MANDI_PRICES);
       }
 
       // Initialize network status
@@ -659,8 +888,9 @@ export default function MandiPricesScreen() {
       }).start();
     } catch (error) {
       console.error('Error initializing app:', error);
-      setPrices([]);
-      setFilteredPrices([]);
+      // Fallback to mock data
+      setPrices(MOCK_MANDI_PRICES);
+      setFilteredPrices(MOCK_MANDI_PRICES);
     }
   };
 
@@ -977,11 +1207,19 @@ export default function MandiPricesScreen() {
     setRefreshing(true);
     try {
       if (isOnline) {
-        // Simulating API call for main prices listing if needed later.
-        // For now, setting to empty to avoid dummy data.
+        // Simulate API call when online
         await new Promise(resolve => setTimeout(resolve, 1000));
-        setPrices([]);
-        setFilteredPrices([]);
+
+        // In a real app, you would fetch from API here
+        // const response = await fetch('/api/mandiprices');
+        // const data = await response.json();
+
+        const newPrices = MOCK_MANDI_PRICES;
+        setPrices(newPrices);
+        setFilteredPrices(newPrices);
+
+        // Cache the new data
+        await offlineStorage.cacheMandiPrices(newPrices);
         setLastSync(new Date());
       } else {
         // Load from cache when offline
