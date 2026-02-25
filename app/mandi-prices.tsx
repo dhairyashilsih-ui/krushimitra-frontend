@@ -156,31 +156,6 @@ const PRICE_RANGES = [
 
 const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
   const router = useRouter();
-  const [expanded, setExpanded] = useState(false);
-  const [mandiPrices, setMandiPrices] = useState<MandiPrice[]>([]);
-  const [loadingPrices, setLoadingPrices] = useState(false);
-
-  const toggleExpand = async () => {
-    if (!expanded && mandiPrices.length === 0) {
-      setLoadingPrices(true);
-      try {
-        // Simulate fetching prices for this specific mandi
-        await new Promise(resolve => setTimeout(resolve, 600)); // Fake network delay
-
-        // Simple mock filter logic using the global MOCK_MANDI_PRICES
-        const locationSpecific = MOCK_MANDI_PRICES.filter(p =>
-          mandi.name.includes(p.location) || p.location === 'Pune'
-        );
-
-        setMandiPrices(locationSpecific.length > 0 ? locationSpecific : MOCK_MANDI_PRICES.slice(0, 3));
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoadingPrices(false);
-      }
-    }
-    setExpanded(!expanded);
-  };
 
   return (
     <View
@@ -199,8 +174,11 @@ const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
       }}
     >
       <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={toggleExpand}
+        activeOpacity={0.7}
+        onPress={() => router.push({
+          pathname: '/mandi-report',
+          params: { mandiName: mandi.name, distance: mandi.distanceKm }
+        })}
         style={{ padding: 16, flexDirection: 'row', alignItems: 'center' }}
       >
         <View style={{
@@ -222,65 +200,7 @@ const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
             </Text>
           </View>
         </View>
-
-        <View style={{
-          width: 32, height: 32, borderRadius: 16,
-          backgroundColor: expanded ? '#4CAF50' : '#F3F4F6',
-          alignItems: 'center', justifyContent: 'center'
-        }}>
-          {expanded ? (
-            <ChevronUp size={20} color="#fff" />
-          ) : (
-            <ChevronDown size={20} color="#6B7280" />
-          )}
-        </View>
       </TouchableOpacity>
-
-      {expanded && (
-        <View style={{ borderTopWidth: 1, borderTopColor: '#F3F4F6', backgroundColor: '#FAFAFA' }}>
-          {loadingPrices ? (
-            <View style={{ padding: 20, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color="#4CAF50" />
-              <Text style={{ marginTop: 8, color: '#666', fontSize: 12 }}>Fetching latest prices...</Text>
-            </View>
-          ) : (
-            <View>
-              {mandiPrices.map((price, idx) => (
-                <View key={idx} style={{
-                  flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-                  paddingVertical: 12, paddingHorizontal: 16,
-                  borderBottomWidth: idx < mandiPrices.length - 1 ? 1 : 0,
-                  borderBottomColor: '#E5E7EB'
-                }}>
-                  <View>
-                    <Text style={{ fontSize: 16, fontWeight: '500', color: '#374151' }}>{price.crop}</Text>
-                    <Text style={{ fontSize: 12, color: '#9CA3AF' }}>{price.category}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1F2937' }}>
-                      ₹{price.price}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: '#6B7280' }}>
-                      /{price.unit?.replace('per ', '')}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-              <TouchableOpacity
-                style={{
-                  padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E5E7EB'
-                }}
-                onPress={() => router.push({
-                  pathname: '/mandi-report',
-                  params: { mandiName: mandi.name, distance: mandi.distanceKm }
-                })}
-              >
-                <Text style={{ color: '#4CAF50', fontWeight: '600', fontSize: 14 }}>View Full Report</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      )}
     </View>
   );
 };
