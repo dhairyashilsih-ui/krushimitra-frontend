@@ -1,7 +1,93 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Platform, ActivityIndicator, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { X, TrendingUp, Calendar, MapPin, Share2, Download, AlertCircle } from 'lucide-react-native';
+import { X, TrendingUp, Calendar, MapPin, Share2, Download, AlertCircle, Search, Clock } from 'lucide-react-native';
+
+export const cropTranslations: Record<string, string> = {
+    'कांदा': 'Onion',
+    'बटाटा': 'Potato',
+    'लसूण': 'Garlic',
+    'आले': 'Ginger',
+    'टोमॅटो': 'Tomato',
+    'भेंडी': 'Okra / Bhindi',
+    'कोबी': 'Cabbage',
+    'फ्लॉवर': 'Cauliflower',
+    'वांगी': 'Brinjal',
+    'भोपळा': 'Pumpkin',
+    'दुधी भोपळा': 'Bottle Gourd',
+    'कारले': 'Bitter Gourd',
+    'दोडका': 'Ridge Gourd',
+    'घोसाळी': 'Sponge Gourd',
+    'गवार': 'Cluster Beans',
+    'शेवगा': 'Drumstick',
+    'ढोबळी मिरची': 'Capsicum',
+    'हिरवी मिरची': 'Green Chilli',
+    'मिरची': 'Green Chilli',
+    'कोथिंबीर': 'Coriander',
+    'पुदीना': 'Mint',
+    'पालक': 'Spinach',
+    'मेथी': 'Fenugreek',
+    'लिंबू': 'Lemon',
+    'गाजर': 'Carrot',
+    'काकडी': 'Cucumber',
+    'पडवळ': 'Snake Gourd',
+    'मटार': 'Green Peas',
+    'वाटाणा': 'Green Peas',
+    'बीट': 'Beetroot',
+    'पावटा': 'Lima Beans',
+    'वालवर': 'Field Beans',
+    'घेवडा': 'French Beans',
+    'सुरण': 'Elephant Foot Yam',
+    'रताळे': 'Sweet Potato',
+    'आंबा': 'Mango',
+    'केळी': 'Banana',
+    'पपई': 'Papaya',
+    'सफरचंद': 'Apple',
+    'पेरू': 'Guava',
+    'डाळिंब': 'Pomegranate',
+    'द्राक्षे': 'Grapes',
+    'संत्री': 'Orange',
+    'मोसंबी': 'Sweet Lime',
+    'कलिंगड': 'Watermelon',
+    'खरबूज': 'Muskmelon',
+    'सीताफळ': 'Custard Apple',
+    'चिकू': 'Chikoo',
+    'अननस': 'Pineapple',
+    'जांभूळ': 'Java Plum',
+    'चवळी': 'Cowpea',
+    'कडीपत्ता': 'Curry Leaves',
+    'कांदापात': 'Spring Onion',
+    'बोर': 'Jujube',
+    'भुईमूग शेंगा': 'Peanuts',
+    'मका': 'Maize',
+    'गहू': 'Wheat',
+    'ज्वारी': 'Sorghum',
+    'बाजरी': 'Pearl Millet',
+    'तांदूळ': 'Rice',
+    'सोयाबीन': 'Soybean',
+    'हरभरा': 'Chickpea',
+    'तूर': 'Pigeon Pea',
+    'मूग': 'Moong Bean',
+    'उडीद': 'Black Gram',
+    'मठ': 'Moth Bean',
+    'तीळ': 'Sesame',
+    'करडई': 'Safflower',
+    'सूर्यफूल': 'Sunflower',
+    'मोहरी': 'Mustard',
+    'गुळ': 'Jaggery'
+};
+
+const getEnglishName = (name: string) => {
+    if (!name) return 'Unknown';
+    if (cropTranslations[name.trim()]) return cropTranslations[name.trim()];
+
+    for (const [marathi, english] of Object.entries(cropTranslations)) {
+        if (name.includes(marathi)) {
+            return english;
+        }
+    }
+    return name;
+};
 import { LinearGradient } from 'expo-linear-gradient';
 import { serverManager } from '../src/services/serverManager';
 
@@ -26,6 +112,8 @@ export default function MandiReportScreen() {
     const [prices, setPrices] = useState<MandiPriceRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [countdownTime, setCountdownTime] = useState('');
 
     const [currentDate, setCurrentDate] = useState(
         new Date().toLocaleDateString('en-IN', {
@@ -35,6 +123,36 @@ export default function MandiReportScreen() {
             day: 'numeric'
         })
     );
+
+    useEffect(() => {
+        const updateCountdown = () => {
+            const now = new Date();
+            let target = new Date();
+            target.setHours(13, 0, 0, 0); // 1 PM
+
+            if (now.getTime() >= target.getTime()) {
+                target.setDate(target.getDate() + 1);
+            }
+
+            const diff = target.getTime() - now.getTime();
+            const h = Math.floor(diff / (1000 * 60 * 60));
+            const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((diff % (1000 * 60)) / 1000);
+
+            setCountdownTime(`${h}h ${m}m ${s}s`);
+        };
+
+        updateCountdown();
+        const interval = setInterval(updateCountdown, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const filteredPrices = prices.filter(item => {
+        const eng = getEnglishName(item.crop).toLowerCase();
+        const mar = item.crop.toLowerCase();
+        const q = searchQuery.toLowerCase();
+        return eng.includes(q) || mar.includes(q);
+    });
 
     useEffect(() => {
         if (!mandiName) return;
@@ -155,13 +273,29 @@ export default function MandiReportScreen() {
                                 </View>
                                 <View style={styles.statDivider} />
                                 <View style={styles.statItem}>
-                                    <Text style={styles.statLabel}>Trend</Text>
+                                    <Text style={styles.statLabel}>Update In</Text>
                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <TrendingUp size={16} color="#4CAF50" />
-                                        <Text style={[styles.statValue, { color: '#4CAF50', marginLeft: 4 }]}>Stable</Text>
+                                        <Clock size={16} color="#F59E0B" />
+                                        <Text style={[styles.statValue, { color: '#F59E0B', marginLeft: 4 }]}>{countdownTime}</Text>
                                     </View>
                                 </View>
                             </View>
+                        </View>
+
+                        <View style={styles.searchContainer}>
+                            <Search size={20} color="#9CA3AF" />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Search produce..."
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                placeholderTextColor="#9CA3AF"
+                            />
+                            {searchQuery.length > 0 && (
+                                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                    <X size={16} color="#9CA3AF" />
+                                </TouchableOpacity>
+                            )}
                         </View>
 
                         <View style={styles.tableContainer}>
@@ -174,12 +308,17 @@ export default function MandiReportScreen() {
                                 <Text style={[styles.columnHeader, { flex: 1, textAlign: 'right' }]}>Modal</Text>
                             </View>
 
-                            {prices.map((item, index) => (
+                            {filteredPrices.length === 0 && (
+                                <Text style={{ textAlign: 'center', padding: 20, color: '#6B7280' }}>No produce found for "{searchQuery}"</Text>
+                            )}
+
+                            {filteredPrices.map((item, index) => (
                                 <View key={index} style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}>
                                     <View style={{ flex: 2 }}>
-                                        <Text style={styles.commodityName}>{item.crop}</Text>
+                                        <Text style={styles.commodityName}>{getEnglishName(item.crop)}</Text>
+                                        {getEnglishName(item.crop) !== item.crop && <Text style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 2 }}>{item.crop}</Text>}
                                         <Text style={styles.commodityVariety}>
-                                            {item.variety || 'Standard'} • /{item.unit || 'Quintal'}
+                                            /{item.unit || 'Quintal'}
                                         </Text>
                                     </View>
                                     <Text style={styles.priceCell}>₹{item.minPrice || '--'}</Text>
@@ -426,5 +565,26 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         marginLeft: 8,
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    searchInput: {
+        flex: 1,
+        marginLeft: 12,
+        fontSize: 15,
+        color: '#1F2937',
+        fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
     },
 });
