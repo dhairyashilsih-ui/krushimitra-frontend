@@ -89,6 +89,8 @@ const getEnglishName = (name: string) => {
     return name;
 };
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { serverManager } from '../src/services/serverManager';
 
 interface MandiPriceRecord {
@@ -196,6 +198,77 @@ export default function MandiReportScreen() {
 
         fetchPrices();
     }, [mandiName]);
+
+    const handleDownloadPDF = async () => {
+        try {
+            setLoading(true);
+            const tableRows = filteredPrices.map((item, index) => `
+                <tr style="background-color: ${index % 2 === 0 ? '#f9fafb' : '#ffffff'};">
+                    <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
+                        <div style="font-weight: 600; color: #374151;">${getEnglishName(item.crop)}</div>
+                        <div style="font-size: 12px; color: #9ca3af;">${item.crop} / ${item.unit || 'Quintal'}</div>
+                    </td>
+                    <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #4b5563;">₹${item.minPrice || '--'}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #4b5563;">₹${item.maxPrice || '--'}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: 700; color: #1f2937;">₹${item.modalPrice || '--'}</td>
+                </tr>
+            `).join('');
+
+            const htmlContent = `
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+                    <style>
+                        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; color: #333; }
+                        .header { text-align: center; margin-bottom: 30px; }
+                        .title { font-size: 28px; font-weight: bold; color: #2E7D32; margin-bottom: 5px; }
+                        .subtitle { font-size: 16px; color: #666; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th { text-align: left; padding: 12px; border-bottom: 2px solid #2E7D32; color: #2E7D32; text-transform: uppercase; font-size: 14px; }
+                        th.right { text-align: right; }
+                        .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #9ca3af; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <div class="title">KrushiMitra Market Report</div>
+                        <div class="subtitle">${mandiName}</div>
+                        <div class="subtitle">Generated on: ${currentDate}</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Commodity</th>
+                                <th class="right">Min (₹)</th>
+                                <th class="right">Max (₹)</th>
+                                <th class="right">Modal (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody>${tableRows}</tbody>
+                    </table>
+                    <div class="footer">Prices are for reference only. Market conditions may change.</div>
+                </body>
+                </html>
+            `;
+
+            const { uri } = await Print.printToFileAsync({ html: htmlContent });
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(uri, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: 'Download Market Report',
+                    UTI: 'com.adobe.pdf'
+                });
+            } else {
+                alert('Sharing is not available on this device');
+            }
+        } catch (error) {
+            console.error("PDF generation error:", error);
+            alert('Could not generate PDF report at this time.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -328,7 +401,7 @@ export default function MandiReportScreen() {
                             ))}
                         </View>
 
-                        <TouchableOpacity style={styles.downloadButton}>
+                        <TouchableOpacity style={styles.downloadButton} onPress={handleDownloadPDF}>
                             <Download size={20} color="#FFFFFF" />
                             <Text style={styles.downloadText}>Download Report (PDF)</Text>
                         </TouchableOpacity>
