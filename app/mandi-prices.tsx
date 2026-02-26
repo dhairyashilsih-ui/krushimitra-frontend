@@ -752,19 +752,8 @@ export default function MandiPricesScreen() {
   // Initialize app with offline support and real-time updates
   const initializeApp = async () => {
     try {
-      // Load cached data first
-      const cachedPrices = await offlineStorage.getCachedMandiPrices();
-      if (cachedPrices && cachedPrices.length > 0) {
-        setPrices(cachedPrices);
-        setFilteredPrices(cachedPrices);
-        console.log('Loaded cached prices:', cachedPrices.length);
-      } else {
-        // Fallback to mock data
-        setPrices(MOCK_MANDI_PRICES);
-        setFilteredPrices(MOCK_MANDI_PRICES);
-        // Cache the mock data
-        await offlineStorage.cacheMandiPrices(MOCK_MANDI_PRICES);
-      }
+      setLoading(true);
+      await refreshPrices();
 
       // Initialize network status
       const networkStatus = networkManager.getNetworkStatus();
@@ -1127,14 +1116,36 @@ export default function MandiPricesScreen() {
     setRefreshing(true);
     try {
       if (isOnline) {
-        // Simulate API call when online
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const backendUrl = serverManager.getBackendEndpoint() || 'http://localhost:3001';
+        const response = await fetch(`${backendUrl}/mandis`);
 
-        // In a real app, you would fetch from API here
-        // const response = await fetch('/api/mandiprices');
-        // const data = await response.json();
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
 
-        const newPrices = MOCK_MANDI_PRICES;
+        const result = await response.json();
+
+        let newPrices = [];
+        if (result.status === 'success' && result.data && result.data.length > 0) {
+          // We have real data from MongoDB
+          // Add unique _ids if they don't have them
+          newPrices = result.data.map((item: any) => ({
+            _id: item._id || Math.random().toString(36).substr(2, 9),
+            crop: item.crop,
+            location: item.mandi || item.location,
+            price: item.modalPrice || item.price || 0,
+            minPrice: item.minPrice,
+            maxPrice: item.maxPrice,
+            date: item.date || new Date().toISOString(),
+            category: item.category || 'Vegetables',
+            unit: item.unit || 'Quintal',
+            change: item.change || 0,
+            changePercent: item.changePercent || 0
+          }));
+        } else {
+          newPrices = MOCK_MANDI_PRICES;
+        }
+
         setPrices(newPrices);
         setFilteredPrices(newPrices);
 
