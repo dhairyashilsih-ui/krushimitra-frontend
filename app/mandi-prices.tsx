@@ -54,8 +54,9 @@ import {
 
 import * as Location from 'expo-location';
 import { serverManager } from '../src/services/serverManager';
-import { queryLLMStream } from '../src/services/llm'; // AI Service
+import { queryLLMStream, summarizeConversation } from '../src/services/llm'; // AI Service
 import { Bot, MessageCircle, Send, User } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 interface MandiPrice {
@@ -481,22 +482,25 @@ export default function MandiPricesScreen() {
   const [aiResponse, setAiResponse] = useState('');
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [conversation, setConversation] = useState<any[]>([]);
+  const [longTermMemory, setLongTermMemory] = useState<string>('');
   const [userData, setUserData] = useState<any>(null); // For context
+  const [aiHasGreeted, setAiHasGreeted] = useState(false);
 
-  // Load User Data for AI Context
+  // Load User Data & Memory for AI Context
   useEffect(() => {
-    const loadUser = async () => {
+    const loadAiContext = async () => {
       try {
-        // Direct AsyncStorage usage to avoid type error
-        const json = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
+        const json = await AsyncStorage.getItem('userData');
         if (json) setUserData(JSON.parse(json));
+        const memory = await AsyncStorage.getItem('ai_longTermMemory');
+        if (memory) setLongTermMemory(memory);
       } catch (e) { console.log('Error loading user data for AI', e); }
     };
-    loadUser();
+    loadAiContext();
   }, []);
 
   // AI Logic
-  const generateMandiAdvice = async (userQuery: string = "") => {
+  const generateMandiAdvice = async (userQuery: string = "", isGreeting = false) => {
     setIsAiThinking(true);
     setAiResponse('');
 
@@ -512,9 +516,9 @@ export default function MandiPricesScreen() {
         `${m.name} (${m.distanceKm}km)`
       ).join(', ');
 
-      // Use mock prices for context if real ones aren't fetched yet for specific mandis
-      // In a real scenario, we'd fetch details first. Here we use the general price list as proxy.
       const priceContext = prices.slice(0, 5).map(p => `${p.crop}: ₹${p.price} (${p.location})`).join('\n');
+
+      const chatHistoryContext = conversation.map(c => `${c.role.toUpperCase()}: ${c.text}`).join('\n');
 
       const systemPrompt = `
         You are KrushiAI, an expert agricultural market advisor.
@@ -522,19 +526,27 @@ export default function MandiPricesScreen() {
         USER PROFILE:
         ${userContext}
         
+        LONG-TERM MEMORY ABOUT THIS USER:
+        "${longTermMemory || '(No memory yet)'}"
+        
+        RECENT CHAT HISTORY:
+        ${chatHistoryContext || '(No recent chat)'}
+        
         NEARBY MANDIS: ${mandiContext}
         
         CURRENT MARKET DATA SAMPLE:
         ${priceContext}
         
         TASK:
-        ${userQuery ? `Answer this specific question: "${userQuery}"` : "Provide a brief, high-value insight about where to sell right now based on the prices above."}
+        ${isGreeting
+          ? "The user just opened the app. Greet them proactively base on their memory profile or an urgent drop/rise in nearby market prices. Keep it strictly under 3 sentences. DO NOT say 'How can I help you?'. BE SPECIFIC to the data and their memory."
+          : `Answer this specific question: "${userQuery}"`}
         
         GUIDELINES:
-        - Be specific and actionable.
-        - Compare prices if relevant.
-        - Keep it short (under 3-4 sentences).
-        - Use Hindi or English based on the user's query language (Default: English).
+        - Be specific and actionable based on the data provided.
+        - NEVER repeat the phrase "LONG-TERM MEMORY ABOUT THIS USER". Just use the facts inside it smoothly.
+        - Keep it very concise (3-4 sentences maximum).
+        - Use Hindi or English (Default: English).
       `;
 
       // 2. Call LLM
@@ -544,12 +556,28 @@ export default function MandiPricesScreen() {
         setAiResponse(prev => prev + chunk);
       }
 
-      // 3. Save to conversation
-      setConversation(prev => [
-        ...prev,
-        { role: 'user', text: userQuery || "Market Insight" },
-        { role: 'ai', text: fullResponse }
-      ]);
+      // 3. Save to live sliding window
+      let newConv = [...conversation];
+      if (!isGreeting) {
+        newConv.push({ role: 'user', text: userQuery });
+      }
+      newConv.push({ role: 'ai', text: fullResponse });
+
+      // SLIDING WINDOW LOGIC (Max 10 messages)
+      if (newConv.length >= 10) {
+        console.log("Chat history hit 10 messages! Triggering background AI memory summarization...");
+        // 1. Trigger background condensation
+        summarizeConversation(newConv, longTermMemory).then(async (newMem) => {
+          setLongTermMemory(newMem);
+          await AsyncStorage.setItem('ai_longTermMemory', newMem);
+          console.log("Background memory saved to disk.");
+        });
+
+        // 2. Clear the active window but keep the last 2 context rows so user's train of thought doesn't abruptly break
+        newConv = newConv.slice(newConv.length - 2);
+      }
+
+      setConversation(newConv);
 
     } catch (error) {
       console.error("AI Error:", error);
@@ -563,9 +591,8 @@ export default function MandiPricesScreen() {
     if (!aiMessage.trim()) return;
     const msg = aiMessage;
     setAiMessage('');
-    // Add user message immediately
-    setConversation(prev => [...prev, { role: 'user', text: msg }]);
-    generateMandiAdvice(msg);
+    // User message is added during `generateMandiAdvice` so AI can read it as `userQuery` without state delays
+    generateMandiAdvice(msg, false);
   };
 
   // Animation refs for futuristic effects
@@ -599,7 +626,9 @@ export default function MandiPricesScreen() {
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({});
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
       const { latitude, longitude } = location.coords;
 
       const backendUrl = serverManager.getBackendEndpoint() || 'http://localhost:3001';
@@ -1589,7 +1618,10 @@ export default function MandiPricesScreen() {
         style={styles.floatingAIButton}
         onPress={() => {
           setShowAIModal(true);
-          if (conversation.length === 0) generateMandiAdvice(); // Auto-start with insight
+          if (conversation.length === 0 && !aiHasGreeted) {
+            setAiHasGreeted(true);
+            generateMandiAdvice("", true); // Auto-start with proactive greeting
+          }
         }}
       >
         <LinearGradient
@@ -1620,13 +1652,6 @@ export default function MandiPricesScreen() {
             </View>
 
             <ScrollView style={styles.chatScroll} contentContainerStyle={{ paddingBottom: 20 }}>
-              {/* Welcome / Context */}
-              <View style={styles.aiWelcomeCard}>
-                <Sparkles size={16} color="#F59E0B" />
-                <Text style={styles.aiWelcomeText}>
-                  Analyzing {nearestMandis.length} nearby mandis for you, {userData?.name || 'Farmer'}...
-                </Text>
-              </View>
 
               {/* Conversation History */}
               {conversation.map((msg, idx) => (

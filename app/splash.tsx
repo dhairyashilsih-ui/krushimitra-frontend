@@ -49,8 +49,11 @@ export default function SplashScreen() {
 
   useEffect(() => {
     if (transitioning) {
-      // Bypass login/onboarding for now -> Go straight to main app
-      replaceWithTransition('/(tabs)');
+      if (params.autologin === 'true') {
+        replaceWithTransition('/(tabs)');
+      } else {
+        replaceWithTransition('/language');
+      }
     }
   }, [transitioning, params]);
 

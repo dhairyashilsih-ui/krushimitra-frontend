@@ -159,104 +159,32 @@ export default function LoginScreen() {
     }
     setEmail(normalizedEmail);
 
-    setCheckingUser(true);
+    setOtpLoading(true);
 
     try {
       const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
-      // First check if user exists
-      const checkResponse = await fetch(`${BACKEND_URL}/auth/check-user`, {
+      // Directly ask backend to send an OTP
+      const otpResponse = await fetch(`${BACKEND_URL}/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: normalizedEmail })
       });
 
-      const checkData = await checkResponse.json();
+      const otpData = await otpResponse.json();
 
-      if (checkResponse.ok && checkData.exists) {
-        // User exists, proceed with sending OTP
-        setCheckingUser(false);
-        setOtpLoading(true);
-
-        const otpResponse = await fetch(`${BACKEND_URL}/auth/send-otp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: normalizedEmail })
-        });
-
-        const otpData = await otpResponse.json();
-
-        if (otpResponse.ok) {
-          setShowOtpField(true);
-          Alert.alert(t('success'), 'OTP sent to your email! Please check your inbox.');
-        } else {
-          Alert.alert(t('error'), otpData.error?.message || 'Failed to send OTP');
-        }
-        setOtpLoading(false);
+      if (otpResponse.ok) {
+        setShowOtpField(true);
+        Alert.alert(t('success'), 'OTP sent to your email! Please check your inbox.');
       } else {
-        // User doesn't exist, show popup to create account
-        setCheckingUser(false);
-        Alert.alert(
-          'Account Not Found',
-          'This email is not registered. Would you like to create a new account?',
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel'
-            },
-            {
-              text: 'Create Account',
-              onPress: () => router.push('/auth/signup')
-            }
-          ]
-        );
+        Alert.alert(t('error'), otpData.error?.message || 'Failed to send OTP');
+        setShowOtpField(false);
       }
     } catch (error) {
-      // If check-user endpoint doesn't exist, assume user exists and try sending OTP directly
-      console.warn('Check user endpoint not available, proceeding with sending OTP directly:', error);
-
-      // Proceed with sending OTP assuming the user might exist
-      setCheckingUser(false);
-      setOtpLoading(true);
-
-      try {
-        const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-        const otpResponse = await fetch(`${BACKEND_URL}/auth/send-otp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: normalizedEmail })
-        });
-
-        const otpData = await otpResponse.json();
-
-        if (otpResponse.ok) {
-          setShowOtpField(true);
-          Alert.alert(t('success'), 'OTP sent to your email! Please check your inbox.');
-        } else {
-          // If sending OTP fails, it might be because user doesn't exist
-          // So we show the account not found message
-          Alert.alert(
-            'Account Not Found',
-            'This email is not registered. Would you like to create a new account?',
-            [
-              {
-                text: 'Cancel',
-                style: 'cancel'
-              },
-              {
-                text: 'Create Account',
-                onPress: () => router.push('/auth/signup')
-              }
-            ]
-          );
-          setShowOtpField(false);
-        }
-      } catch (otpError) {
-        console.error('Error sending OTP:', otpError);
-        Alert.alert(t('error'), 'Network error. Please try again.');
-      } finally {
-        setOtpLoading(false);
-      }
+      console.error('Error sending OTP:', error);
+      Alert.alert(t('error'), 'Network error. Please try again.');
+    } finally {
+      setOtpLoading(false);
     }
   };
 
@@ -444,14 +372,14 @@ export default function LoginScreen() {
                     <TouchableOpacity
                       style={[
                         isMobile ? styles.otpButtonFullWidth : styles.otpButton,
-                        (otpLoading || checkingUser || !email || !email.includes('@')) && styles.otpButtonDisabled
+                        (otpLoading || !email || !email.includes('@')) && styles.otpButtonDisabled
                       ]}
                       onPress={handleSendOtp}
-                      disabled={otpLoading || checkingUser || !email || !email.includes('@')}
+                      disabled={otpLoading || !email || !email.includes('@')}
                       activeOpacity={0.8}
                     >
                       <Text style={styles.otpButtonText}>
-                        {checkingUser ? 'Checking...' : otpLoading ? t('loading') : t('getOTP')}
+                        {otpLoading ? t('loading') : t('getOTP')}
                       </Text>
                     </TouchableOpacity>
                   </View>

@@ -23,6 +23,7 @@
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/material-top-tabs": "^7.3.7",
     "@react-navigation/native": "^7.0.14",
+    "axios": "^1.13.5",
     "cors": "^2.8.5",
     "elevenlabs": "^1.59.0",
     "expo": "~53.0.24",
