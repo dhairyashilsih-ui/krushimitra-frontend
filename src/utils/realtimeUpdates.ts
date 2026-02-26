@@ -162,15 +162,15 @@ class RealTimeUpdateManager {
 
       dbUpdates.forEach((item: any) => {
         // Use realistic price variation if previousPrice is missing
-        const price = Number(item.price);
+        const price = Number(item.modalPrice || item.price || 0);
         const previousPrice = item.previousPrice ? Number(item.previousPrice) : price;
         const change = price - previousPrice;
         const changePercent = previousPrice ? (change / previousPrice) * 100 : 0;
 
         const update: PriceUpdate = {
           id: item._id,
-          commodity: item.crop,
-          location: item.location,
+          commodity: item.crop || item.commodity,
+          location: item.mandi || item.location,
           price: price,
           previousPrice: previousPrice,
           change: change,
