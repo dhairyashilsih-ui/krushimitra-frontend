@@ -1557,11 +1557,11 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
       setIsProcessing(false);
 
       if (autoStartListening) {
+        // Note: DO NOT check isSpeaking/isProcessing here — they are stale closures.
+        // We just set them to false above, so it is always safe to restart listening.
         setTimeout(() => {
-          if (!isSpeaking && !isProcessing) {
-            console.log('Auto-starting listening after TTS');
-            startListening();
-          }
+          console.log('Auto-starting listening after TTS');
+          startListening();
         }, 800);
       }
     }
