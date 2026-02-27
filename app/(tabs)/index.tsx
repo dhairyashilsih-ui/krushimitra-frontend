@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Modal, Animated, Alert, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Modal, Animated, Alert, Platform, useWindowDimensions, ToastAndroid } from 'react-native';
 import * as Location from 'expo-location';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
@@ -1548,8 +1548,17 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
       console.log('TTS completed successfully');
 
     } catch (err) {
-      console.error('speakResponse error:', err instanceof Error ? err.message : String(err));
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('speakResponse error:', errorMsg);
       if (sound) sound.unloadAsync();
+
+      // Show user why the orb failed to speak instead of failing silently
+      if (Platform.OS !== 'web') {
+        ToastAndroid.show(`Voice Error: ${errorMsg}`, ToastAndroid.SHORT);
+      } else {
+        alert(`Voice Error: ${errorMsg}`);
+      }
+
     } finally {
       stopSpeakingAnimation();
       setIsSpeaking(false);
