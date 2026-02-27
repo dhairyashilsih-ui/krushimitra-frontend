@@ -1239,18 +1239,19 @@ export default function HomeScreen() {
 
     const raw = text.trim();
 
-    // Detect language: does this text have Hindi/Devanagari/Marathi characters?
-    const hasDevanagari = /[\u0900-\u097F]/.test(raw);
-    const hasLatin = /[a-zA-Z]/.test(raw);
+    // Detect language: does this text have non-Latin regional characters? (Hindi, Marathi, Malayalam, etc.)
+    // \p{L} matches any letter, and we subtract basic Latin options to broadly match regional scripts
+    // A simpler approach is just checking for any character outside the standard ASCII range.
+    const hasRegionalScript = /[^\x00-\x7F]/.test(raw);
 
-    if (hasDevanagari) {
-      // For Devanagari script — just need at least 1 character
-      // Browser STT often returns confidence=0 for Hindi even when correct, so skip confidence check
+    if (hasRegionalScript) {
+      // For regional scripts — just need at least 1 character.
+      // Browser STT often returns low/zero confidence for regional languages even when correct.
       if (raw.length < 1) {
-        console.log('Devanagari speech too short:', raw);
+        console.log('Regional speech too short:', raw);
         return false;
       }
-      console.log('Valid Devanagari speech:', raw);
+      console.log('Valid regional speech:', raw);
       return true;
     }
 
