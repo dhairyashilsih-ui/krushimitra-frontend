@@ -25,6 +25,7 @@ import { networkManager } from '../src/utils/networkManager';
 import { pinnedItemsManager } from '../src/utils/pinnedItems';
 import { alertSystem } from '../src/utils/alertSystem';
 import OfflineIndicator from '../src/components/OfflineIndicator';
+import AnimatedOrb from '../components/AnimatedOrb';
 import {
   Search,
   Filter,
@@ -1613,9 +1614,9 @@ export default function MandiPricesScreen() {
       {renderFilterModal()}
       {renderPinModal()}
 
-      {/* Floating AI Button */}
+      {/* Floating AI Button (Living Orb) */}
       <TouchableOpacity
-        style={styles.floatingAIButton}
+        style={[styles.floatingAIButton, { backgroundColor: 'transparent', elevation: 0, shadowColor: 'transparent', padding: 0 }]}
         onPress={() => {
           setShowAIModal(true);
           if (conversation.length === 0 && !aiHasGreeted) {
@@ -1623,13 +1624,9 @@ export default function MandiPricesScreen() {
             generateMandiAdvice("", true); // Auto-start with proactive greeting
           }
         }}
+        activeOpacity={0.8}
       >
-        <LinearGradient
-          colors={['#2E7D32', '#4CAF50']}
-          style={styles.floatingAIButtonGradient}
-        >
-          <Bot size={28} color="#FFFFFF" />
-        </LinearGradient>
+        <AnimatedOrb isListening={false} isSpeaking={isAiThinking} size={50} />
       </TouchableOpacity>
 
       {/* AI Assistant Modal */}

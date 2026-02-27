@@ -49,6 +49,13 @@ export default function SplashScreen() {
 
   useEffect(() => {
     if (transitioning) {
+      if (__DEV__) {
+        console.log("DEV ENVIRONMENT DETECTED: Bypassing Login");
+        replaceWithTransition('/(tabs)');
+        return;
+      }
+
+      // Respect the autologin param set by index.tsx based on existing AsyncStorage login data.
       if (params.autologin === 'true') {
         replaceWithTransition('/(tabs)');
       } else {

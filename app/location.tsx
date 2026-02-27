@@ -17,7 +17,7 @@ export default function LocationScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  
+
   const handlePermissionDenied = () => {
     Alert.alert(
       'Location Permission Required',
@@ -45,13 +45,17 @@ export default function LocationScreen() {
 
       await AsyncStorage.setItem('userLocation', JSON.stringify(currentLocation));
 
-      const [address] = await Location.reverseGeocodeAsync({
+      const [addressObj] = await Location.reverseGeocodeAsync({
         latitude: currentLocation.coords.latitude,
         longitude: currentLocation.coords.longitude,
       });
 
-      if (address) {
-        await AsyncStorage.setItem('userAddress', JSON.stringify(address));
+      if (addressObj) {
+        // Prefer city/district and region to show a concise, clean location format
+        const formattedAddress = [addressObj.city || addressObj.subregion || addressObj.district, addressObj.region]
+          .filter(Boolean)
+          .join(', ');
+        await AsyncStorage.setItem('userAddress', JSON.stringify(formattedAddress || 'Location found'));
       }
 
       router.replace('/auth/login');

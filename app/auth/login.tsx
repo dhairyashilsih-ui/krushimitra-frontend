@@ -173,7 +173,7 @@ export default function LoginScreen() {
 
       const otpData = await otpResponse.json();
 
-      if (otpResponse.ok) {
+      if (otpResponse.ok || otpData.status === 'success') {
         setShowOtpField(true);
         Alert.alert(t('success'), 'OTP sent to your email! Please check your inbox.');
       } else {

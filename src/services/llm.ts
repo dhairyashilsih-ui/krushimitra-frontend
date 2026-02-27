@@ -45,10 +45,32 @@ export async function* queryLLMStream(
   if (mode === 'hybrid') {
     try {
       console.log('🔄 Trying local Ollama first...');
-      yield* queryLocalOnly(prompt, userContext);
-      return;
+
+      // We wrap the local stream in a race with a timeout. If it doesn't yield the first chunk within 4 seconds, we abort and failover.
+      const ac = new AbortController();
+      const timeoutId = setTimeout(() => ac.abort('Local LLM Timeout'), 4000);
+
+      try {
+        let firstChunkReceived = false;
+        // Pass the signal to queryLocalOnly if it accepted one, but since it doesn't, we just monitor time
+        for await (const chunk of queryLocalOnly(prompt, userContext)) {
+          if (!firstChunkReceived) {
+            clearTimeout(timeoutId);
+            firstChunkReceived = true;
+          }
+          yield chunk;
+        }
+
+        if (!firstChunkReceived) {
+          throw new Error('Local LLM returned empty response');
+        }
+        return;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        throw err;
+      }
     } catch (error) {
-      console.warn('⚠️ Local Ollama failed, trying cloud fallback...', error);
+      console.warn('⚠️ Local Ollama failed or timed out, trying cloud fallback...', error);
       try {
         yield* queryCloudOnly(prompt, userContext);
         return;
@@ -93,20 +115,18 @@ async function* queryCloudOnly(prompt: string, userContext?: any): AsyncGenerato
   const currentWeather = userContext?.weather_data?.current?.description || 'जानकारी उपलब्ध नहीं';
 
   // Build prompt with the requested format
-  const systemPrompt = `You are KrushiAI, a simple farming assistant.
-Start the answer with the user's name.
-Reply only in easy Hindi (Devanagari).
-User name = ${userName}
-User location = ${userLocation}
-Weather at that location = ${currentWeather}
+  const systemPrompt = `You are KrushiMitra, a friendly, human-like agricultural assistant. 
+Reply ONLY in conversational, easy-to-understand Hindi (Devanagari script). 
+Do NOT sound like a robot. Do NOT use markdown. Do NOT use bullet points. Keep it short (2-3 sentences max) and spoken-style.
+NEVER say "How can I help you?" if you already provided a proactive greeting or an answer.
+Vary your greetings so you don't sound repetitive.
+User name: ${userName}
+User location: ${userLocation}
+Weather: ${currentWeather}
 
-Use this data to answer the user's question.`;
+Use this context to be helpful naturally.`;
 
-  const userMessage = `--- USER QUESTION ---
-${prompt}
------------------------
-
-Your Answer (in Hindi):`;
+  const userMessage = `${prompt}`;
 
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
@@ -142,20 +162,20 @@ async function* queryLocalOnly(prompt: string, userContext?: any): AsyncGenerato
   const currentWeather = userContext?.weather_data?.current?.description || 'जानकारी उपलब्ध नहीं';
 
   // Build prompt with the requested format
-  const fullPrompt = `You are KrushiAI, a simple farming assistant.
-Start the answer with the user's name.
-Reply only in easy Hindi (Devanagari).
+  const fullPrompt = `You are KrushiMitra, a friendly, human-like agricultural assistant. 
+Reply ONLY in conversational, easy-to-understand Hindi (Devanagari script). 
+Do NOT sound like a robot. Do NOT use markdown. Do NOT use bullet points. Keep it short (2-3 sentences max) and spoken-style.
+NEVER say "How can I help you?" unnecessarily. Vary your tone so you don't sound repetitive.
+
 User name = ${userName}
 User location = ${userLocation}
 Weather at that location = ${currentWeather}
 
-Use this data to answer the user's question.
-
---- USER QUESTION ---
+--- USER INPUT ---
 ${prompt}
 -----------------------
 
-Your Answer (in Hindi):`;
+Your Friendly Answer (in Hindi):`;
 
   console.log('📝 Formatted Prompt:', fullPrompt.substring(0, 200) + '...');
   yield* queryOllamaStream(fullPrompt);
@@ -213,11 +233,11 @@ export async function summarizeConversation(
         content: `You are a background AI managing long-term memory for a farmer.
 Your goal is to extract key facts about the user's farm, location, crop interests, and pain points.
 Update their existing memory profile with any NEW facts from the recent chat log.
-Keep it strictly under 50 words. Be concise. Reply ONLY with the updated memory profile text.`
+Keep it strictly under 50 words. Be concise. Reply ONLY with the updated memory profile text. Do not add conversational filler.`
       },
       {
         role: 'user',
-        content: `Current Memory: "${currentMemory || 'None'}"\n\nRecent Chat Log to digest:\n${historyText}`
+        content: `Current Memory: "${currentMemory || 'None'}"\n\nRecent Chat Log:\n${historyText}\n\nOutput only the updated memory:`
       }
     ];
 

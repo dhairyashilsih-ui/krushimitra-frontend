@@ -37,6 +37,7 @@ import { voiceInputService, recordAndTranscribeVoice, testWhisperConnection } fr
 import { serverManager, getServerConfig } from '@/src/services/serverManager';
 import NetInfo from '@react-native-community/netinfo';
 import { realtimeUpdates } from '@/src/utils/realtimeUpdates';
+import AnimatedOrb from '@/components/AnimatedOrb';
 
 const normalizeUserId = (value: any): string | null => {
   if (!value) {
@@ -106,6 +107,7 @@ export default function HomeScreen() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [hasSpokenWelcome, setHasSpokenWelcome] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<any | null>(null);
   let debounceTimeout: any; // Change from NodeJS.Timeout | undefined to any
 
   const displayName = useMemo(() => {
@@ -776,96 +778,16 @@ export default function HomeScreen() {
           }
         }
 
-        // Extract very detailed address components
-        let streetNumber = ''; // House/Building number
-        let route = ''; // Street/Road name
-        let premise = ''; // Building/House name
-        let subpremise = ''; // Flat/Unit number
-        let neighborhood = ''; // Neighborhood
-        let sublocality1 = ''; // Primary sublocality
-        let sublocality2 = ''; // Secondary sublocality
-        let locality = ''; // City/Town
-        let taluka = ''; // Taluka (administrative_area_level_3)
-        let district = ''; // District (administrative_area_level_2)
-        let state = ''; // State
-        let postalCode = '';
-
-        for (const component of result.address_components) {
-          const types = component.types;
-
-          if (types.includes('street_number')) {
-            streetNumber = component.long_name;
+        // Instead of manually building a brittle address string, use the API's formatted string directly.
+        // Usually `formatted_address` is "Street, Neighborhood, City, State ZIP, Country". 
+        // We can just take the first 2 or 3 components for a clean display.
+        let formattedAddress = result.formatted_address;
+        if (formattedAddress) {
+          const parts = formattedAddress.split(',').map((p: string) => p.trim());
+          // E.g. "Maharshi Nagar, Pune", or "Gultekadi, Pune"
+          if (parts.length >= 3) {
+            formattedAddress = parts.slice(0, Math.min(3, parts.length - 2)).join(', ');
           }
-          if (types.includes('route')) {
-            route = component.long_name;
-          }
-          if (types.includes('premise')) {
-            premise = component.long_name;
-          }
-          if (types.includes('subpremise')) {
-            subpremise = component.long_name;
-          }
-          if (types.includes('neighborhood')) {
-            neighborhood = component.long_name;
-          }
-          if (types.includes('sublocality_level_1')) {
-            sublocality1 = component.long_name;
-          }
-          if (types.includes('sublocality_level_2')) {
-            sublocality2 = component.long_name;
-          }
-          if (types.includes('sublocality') && !sublocality1) {
-            sublocality1 = component.long_name;
-          }
-          if (types.includes('locality')) {
-            locality = component.long_name;
-          }
-          if (types.includes('administrative_area_level_3')) {
-            taluka = component.long_name;
-          }
-          if (types.includes('administrative_area_level_2')) {
-            district = component.long_name;
-          }
-          if (types.includes('administrative_area_level_1')) {
-            state = component.short_name;
-          }
-          if (types.includes('postal_code')) {
-            postalCode = component.long_name;
-          }
-        }
-
-        // Build short, concise address (3-4 components only)
-        let formattedAddress = '';
-
-        // Priority 1: Building/House name or street number + route
-        if (premise) {
-          formattedAddress = premise;
-        } else if (streetNumber && route) {
-          formattedAddress = `${streetNumber} ${route}`;
-        } else if (route) {
-          formattedAddress = route;
-        }
-
-        // Priority 2: Add primary area (sublocality)
-        if (sublocality1) {
-          formattedAddress += (formattedAddress ? ', ' : '') + sublocality1;
-        } else if (neighborhood) {
-          formattedAddress += (formattedAddress ? ', ' : '') + neighborhood;
-        }
-
-        // Priority 3: Add city
-        if (locality && locality !== sublocality1) {
-          formattedAddress += (formattedAddress ? ', ' : '') + locality;
-        }
-
-        // Priority 4: Add postal code
-        if (postalCode) {
-          formattedAddress += ' - ' + postalCode;
-        }
-
-        // Fallback to Google's formatted address if nothing found
-        if (!formattedAddress && result.formatted_address) {
-          formattedAddress = result.formatted_address;
         }
 
         setUserAddress(formattedAddress || 'Location found');
@@ -1396,23 +1318,37 @@ export default function HomeScreen() {
       // Extract temperature
       const temperature = weatherData?.temperature || '28';
 
-      // Build personalized welcome message
-      const welcomeMessage = `नमस्कार ${userName}, कैसे हो? KrushiMitra में आपका हार्दिक स्वागत है। आपके शहर ${cityName} में इस वक़्त तापमान ${temperature}°C है। चलिए, आज का दिन बेहतर बनाते हैं!`;
+      console.log('🎙️ Generating dynamic AI welcome message for:', userName);
+      setIsProcessing(true);
+
+      // We make a background LLM call to get a dynamic greeting
+      const prompt = `You are KrushiMitra AI, a helpful farming assistant. The user's name is ${userName}. They are in ${cityName} where the temperature is ${temperature}°C. 
+Write a short, completely natural 2-sentence greeting in Hindi. Mention the weather and ask how you can help them today. Do NOT say "Here is a greeting" or use any English.`;
+
+      let welcomeMessage = '';
+      try {
+        let streamedResponse = '';
+        for await (const chunk of queryLLMStream(prompt)) {
+          streamedResponse += chunk;
+        }
+        welcomeMessage = streamedResponse.trim();
+      } catch (err) {
+        console.warn('Failed to generate dynamic welcome message, falling back to static:', err);
+        welcomeMessage = `नमस्कार ${userName}, कैसे हो? KrushiMitra में आपका हार्दिक स्वागत है। आपके शहर ${cityName} में इस वक़्त तापमान ${temperature}°C है। मैं आपकी कैसे मदद कर सकता हू?`;
+      }
 
       console.log('🎙️ Speaking welcome message:', welcomeMessage);
 
-      // Speak the welcome message (without auto-restart listening)
-      await speakResponse(welcomeMessage, false);
+      // Speak the welcome message AND auto-start listening afterwards so the user can just talk
+      await speakResponse(welcomeMessage, true);
 
     } catch (error) {
       console.error('Error speaking welcome message:', error);
+      setIsProcessing(false);
     }
   }, [userData, weatherData, userAddress]);
 
-  // Speak welcome message when both user data and weather are loaded
-  // Disabled auto-play due to browser autoplay policy - browsers block audio without user interaction
-  // The welcome message will only play when user clicks the AI orb or interacts with the page
-  /*
+  // Proactive AI Orb on mount - Speaks without tapping
   useEffect(() => {
     if (userData && weatherData && userAddress && !hasSpokenWelcome) {
       // Wait for all initial processing to complete before speaking welcome
@@ -1423,11 +1359,10 @@ export default function HomeScreen() {
           speakWelcomeMessage();
         }
       }, 4000); // 4 second delay to let other operations complete
-      
+
       return () => clearTimeout(timer);
     }
   }, [userData, weatherData, userAddress, hasSpokenWelcome, isSpeaking, isProcessing, speakWelcomeMessage]);
-  */
 
   const preloadTtsAudio = useCallback(async (text: string) => {
     // Preload audio buffer immediately so playback can start without UI delay
@@ -1551,17 +1486,8 @@ export default function HomeScreen() {
       return;
     }
 
-    if (modalWelcomeTtsTimer.current) {
-      clearTimeout(modalWelcomeTtsTimer.current);
-    }
-
-    modalWelcomeTtsTimer.current = setTimeout(() => {
-      modalWelcomeTtsTimer.current = null;
-      const welcomeMessage = 'नमस्ते! KrushiAI सहायक अब सक्रिय है। आप मौसम, मंडी भाव, फसल और कीट से जुड़े सवाल पूछ सकते हैं।';
-      if (!isSpeakingRef.current && !isProcessingRef.current) {
-        speakResponse(welcomeMessage, false);
-      }
-    }, 120); // align with modal pop animation
+    // We no longer speak a static welcome message when the modal opens.
+    // The initial proactive greeting handles the welcome gracefully.
 
     return () => {
       if (modalWelcomeTtsTimer.current) {
@@ -2021,224 +1947,38 @@ export default function HomeScreen() {
 
         {/* AI Assistant - Futuristic Centered Circle */}
         <View style={styles.centeredCircleContainer}>
-          {/* Outer Orbital Ring */}
-          <Animated.View style={[
-            styles.outerOrbitalRing,
-            {
-              transform: [{
-                rotate: orbitalAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['0deg', '360deg'],
-                })
-              }]
-            }
-          ]}>
-            <View style={styles.orbitalDot1} />
-            <View style={styles.orbitalDot2} />
-            <View style={styles.orbitalDot3} />
-          </Animated.View>
-
           {/* Main Circle with Enhanced Effects */}
           <TouchableOpacity
             onPress={handleOrbPress}
             activeOpacity={0.7}
             style={styles.circleTouchContainer}
           >
-            <Animated.View style={[
-              styles.perfectMainCircle,
-              {
-                shadowOpacity: glowAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.3, 0.8],
-                }),
-                shadowRadius: glowAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 40],
-                }),
-                transform: [
-                  {
-                    scale: audioLevel
-                  }
-                ]
-              }
-            ]}>
-              {/* Holographic Gradient */}
-              <LinearGradient
-                colors={[
-                  'rgba(59, 130, 246, 0.9)',
-                  'rgba(139, 92, 246, 0.8)',
-                  'rgba(16, 185, 129, 0.7)',
-                  'rgba(236, 72, 153, 0.6)',
-                  'rgba(59, 130, 246, 0.9)'
-                ]}
-                style={styles.holographicLayer}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                {/* Inner Glass Effect */}
-                <LinearGradient
-                  colors={[
-                    'rgba(255, 255, 255, 0.2)',
-                    'rgba(255, 255, 255, 0.05)',
-                    'rgba(255, 255, 255, 0.1)'
-                  ]}
-                  style={styles.glassLayer}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <View style={styles.circleContentMain}>
-                    {/* AI Bot with Glow */}
-                    <Animated.View style={[
-                      styles.botContainer,
-                      {
-                        opacity: glowAnimation.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.8, 1],
-                        })
-                      }
-                    ]}>
-                      <Bot size={90} color="#FFFFFF" />
-                    </Animated.View>
+            <AnimatedOrb
+              isListening={isListening}
+              isSpeaking={isSpeaking}
+              isThinking={false}
+              size={160}
+            />
+            {/* Overlay the text and icons on top of the orb */}
+            <View style={[styles.circleContentMain, { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }]}>
 
-                    {/* Futuristic Text */}
-                    <Animated.Text style={[
-                      styles.futuristicTitle,
-                      {
-                        opacity: glowAnimation.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.9, 1],
-                        })
-                      }
-                    ]}>KrushiAi</Animated.Text>
+              {/* Mic Icon for Voice Control */}
+              <View style={{ marginBottom: 5 }}>
+                {isPaused ? (
+                  <Play size={50} color="#FFFFFF" />
+                ) : isListening ? (
+                  <MicOff size={50} color="#FFFFFF" />
+                ) : (
+                  <Mic size={50} color="#FFFFFF" />
+                )}
+              </View>
 
-                    <Animated.Text style={[
-                      styles.futuristicSubtitle,
-                      {
-                        opacity: glowAnimation.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.7, 1],
-                        })
-                      }
-                    ]}>
-                      {isPaused ? "Paused" : isListening ? t('aiAssistant.listening') : isSpeaking ? t('aiAssistant.speaking') : t('aiAssistant.neuralInterface')}
-                    </Animated.Text>
+              <Animated.Text style={styles.futuristicSubtitle}>
+                {isPaused ? "Paused" : isListening ? t('aiAssistant.listening') : isSpeaking ? t('aiAssistant.speaking') : t('aiAssistant.neuralInterface')}
+              </Animated.Text>
 
-                    {/* Voice Input Mode Indicator */}
-                    <View style={styles.voiceInputModeContainer}>
-                      <View style={[
-                        styles.voiceInputModeIndicator,
-                        { backgroundColor: whisperReady ? '#4CAF50' : '#FF9800' }
-                      ]}>
-                        <Text style={styles.voiceInputModeText}>
-                          {whisperReady ? 'Whisper STT' : 'Browser STT'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Mic Icon for Voice Control */}
-                    <View style={styles.micIconContainer}>
-                      {isPaused ? (
-                        <Play size={24} color="#FFFFFF" />
-                      ) : isListening ? (
-                        <MicOff size={24} color="#FFFFFF" />
-                      ) : (
-                        <Mic size={24} color="#FFFFFF" />
-                      )}
-                    </View>
-
-                    {/* Data Streams */}
-                    <View style={styles.dataStreams}>
-                      <Animated.View style={[
-                        styles.dataLine,
-                        {
-                          opacity: glowAnimation.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0.3, 0.8],
-                          })
-                        }
-                      ]} />
-                      <Animated.View style={[
-                        styles.dataLine,
-                        styles.dataLine2,
-                        {
-                          opacity: glowAnimation.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0.2, 0.6],
-                          })
-                        }
-                      ]} />
-                    </View>
-                  </View>
-                </LinearGradient>
-              </LinearGradient>
-
-              {/* Multiple Pulse Rings */}
-              <Animated.View style={[
-                styles.pulseRingMain,
-                {
-                  opacity: glowAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.4, 0.8],
-                  }),
-                  transform: [{
-                    scale: glowAnimation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, 1.15],
-                    })
-                  }]
-                }
-              ]} />
-
-              <Animated.View style={[
-                styles.pulseRingSecondary,
-                {
-                  opacity: glowAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.2, 0.5],
-                  }),
-                  transform: [{
-                    scale: glowAnimation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1.1, 1.3],
-                    })
-                  }]
-                }
-              ]} />
-            </Animated.View>
+            </View>
           </TouchableOpacity>
-
-          {/* Energy Particles */}
-          <Animated.View style={[
-            styles.energyParticle1,
-            {
-              opacity: glowAnimation.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.5, 1],
-              }),
-              transform: [{
-                rotate: orbitalAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['0deg', '-360deg'],
-                })
-              }]
-            }
-          ]} />
-
-          <Animated.View style={[
-            styles.energyParticle2,
-            {
-              opacity: glowAnimation.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.3, 0.8],
-              }),
-              transform: [{
-                rotate: orbitalAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['180deg', '540deg'],
-                })
-              }]
-            }
-          ]} />
         </View>
 
         {/* Pause Control Button */}
@@ -2257,217 +1997,438 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Professional Light-Themed Weather Forecast */}
+        {/* ── Weather Section ─────────────────────────────── */}
         <View style={styles.weatherForecastContainer}>
-          {/* Current Weather Card */}
-          <View
-            style={[
-              styles.currentWeatherCard,
-              // Animation removed as per user request
-            ]}
-          >
+
+          {/* Main Weather Card — gradient header + white body */}
+          <View style={styles.weatherCardPremium}>
+            {/* Gradient header band */}
             <LinearGradient
-              colors={['#FFFFFF', '#F8FDF9', '#F0FDF4']}
-              style={styles.weatherCardGradient}
+              colors={['#1B5E20', '#2E7D32', '#388E3C']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
+              style={styles.weatherCardHeader}
             >
-              <View style={styles.currentWeatherHeader}>
-                <View style={styles.locationContainer}>
-                  <View style={styles.locationIconWrapper}>
-                    <MapPin size={16} color="#4CAF50" />
-                  </View>
-                  <Text style={styles.locationText} numberOfLines={1} ellipsizeMode="tail">
-                    {userAddress}
+              {/* Location + time row */}
+              <View style={styles.weatherHeaderTop}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 }}>
+                  <MapPin size={12} color="rgba(255,255,255,0.75)" />
+                  <Text style={styles.weatherLocationText} numberOfLines={1}>
+                    {userAddress || 'Detecting location...'}
                   </Text>
                 </View>
-                <View style={styles.timeContainer}>
-                  <Text style={styles.updateTime}>
-                    {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
-                  <View style={styles.liveIndicatorWeather}>
-                    <Text style={styles.liveText}>LIVE</Text>
-                  </View>
+                <View style={styles.liveChipPremium}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveChipPremiumText}>LIVE</Text>
                 </View>
               </View>
 
-              <View style={styles.currentWeatherMain}>
-                <View style={styles.tempSection}>
-                  <Animated.Text
-                    style={[
-                      styles.currentTemp,
-                      {
-                        transform: [{
-                          scale: pulseAnimation.interpolate({
-                            inputRange: [1, 1.1],
-                            outputRange: [1, 1.03]
-                          })
-                        }]
-                      }
-                    ]}
-                  >
-                    {weatherData ? `${weatherData.temperature}°C` : 'Loading...'}
-                  </Animated.Text>
-                  <View style={styles.weatherIconWrapper}>
-                    <Animated.View
-                      style={[{
-                        transform: [{
-                          translateY: weatherAnimation.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0, -4]
-                          })
-                        }]
-                      }]}
-                    >
-                      <View style={styles.iconBackground}>
-                        <Cloud size={52} color="#4CAF50" />
-                      </View>
-                    </Animated.View>
-                    <Text style={styles.weatherCondition}>
-                      {weatherData?.condition || 'Cloudy'}
-                    </Text>
-                    <Text style={styles.feelsLike}>
-                      {weatherData ? `Feels like ${weatherData.temperature}°C` : 'Loading...'}
-                    </Text>
+              {/* Temp + Emoji */}
+              {!weatherData ? (
+                <View style={{ gap: 8, marginTop: 8 }}>
+                  <View style={[styles.skeletonBlockLight, { width: 100, height: 48 }]} />
+                  <View style={[styles.skeletonBlockLight, { width: 120, height: 14 }]} />
+                </View>
+              ) : (
+                <View style={styles.weatherHeaderMain}>
+                  <View>
+                    <Text style={styles.tempHuge}>{weatherData.temperature}°C</Text>
+                    <View style={styles.conditionBadge}>
+                      <Text style={styles.conditionBadgeText}>{weatherData.condition || 'Clear'}</Text>
+                    </View>
+                    <Text style={styles.feelsLikeMuted}>Feels like {weatherData.temperature}°C</Text>
                   </View>
-                </View>
-
-                <View style={styles.miniStatsContainer}>
-                  <View style={styles.miniStatsGrid}>
-                    <View style={styles.miniStat}>
-                      <View style={[styles.statIconWrapper, { backgroundColor: '#E8F5E9' }]}>
-                        <Cloud size={16} color="#4CAF50" />
-                      </View>
-                      <Text style={styles.miniStatValue}>
-                        {weatherData ? `${weatherData.precipitationProbability}%` : '--'}
-                      </Text>
-                      <Text style={styles.miniStatLabel}>Rain</Text>
-                    </View>
-                    <View style={styles.miniStat}>
-                      <View style={[styles.statIconWrapper, { backgroundColor: '#E8F5E9' }]}>
-                        <Thermometer size={16} color="#4CAF50" />
-                      </View>
-                      <Text style={styles.miniStatValue}>
-                        {weatherData ? `${weatherData.humidity}%` : '--'}
-                      </Text>
-                      <Text style={styles.miniStatLabel}>Humidity</Text>
-                    </View>
-                    <View style={styles.miniStat}>
-                      <View style={[styles.statIconWrapper, { backgroundColor: '#E8F5E9' }]}>
-                        <Activity size={16} color="#4CAF50" />
-                      </View>
-                      <Text style={styles.miniStatValue}>
-                        {weatherData ? `${weatherData.windSpeed} km/h` : '-- km/h'}
-                      </Text>
-                      <Text style={styles.miniStatLabel}>Wind</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              {/* Farming Advisory Section */}
-              <View style={styles.advisorySection}>
-                <View style={styles.advisoryIconWrapper}>
-                  <Sparkles size={20} color="#4CAF50" />
-                </View>
-                <View style={styles.advisoryTextContainer}>
-                  <Text style={styles.advisoryTitle}>AI Farming Advisory</Text>
-                  <Text style={styles.advisoryText}>
-                    {isLoadingAdvisory ? 'Generating personalized advice...' : aiAdvisory}
+                  <Text style={styles.weatherEmojiLg}>
+                    {weatherData.condition?.toLowerCase().includes('rain') ? '🌧️'
+                      : weatherData.condition?.toLowerCase().includes('cloud') ? '⛅'
+                        : weatherData.condition?.toLowerCase().includes('storm') ? '⛈️'
+                          : '☀️'}
                   </Text>
                 </View>
-              </View>
+              )}
             </LinearGradient>
+
+            {/* White body — stats row */}
+            <View style={styles.weatherCardBody}>
+              {!weatherData ? (
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  {[1, 2, 3].map(i => (
+                    <View key={i} style={[styles.skeletonBlock, { flex: 1, height: 60, borderRadius: 12 }]} />
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.statsRowPremium}>
+                  <View style={styles.statItemPremium}>
+                    <Text style={styles.statItemEmoji}>💧</Text>
+                    <Text style={styles.statItemValue}>{weatherData.precipitationProbability}%</Text>
+                    <Text style={styles.statItemLabel}>Rain</Text>
+                  </View>
+                  <View style={styles.statDividerV} />
+                  <View style={styles.statItemPremium}>
+                    <Text style={styles.statItemEmoji}>🌫️</Text>
+                    <Text style={styles.statItemValue}>{weatherData.humidity}%</Text>
+                    <Text style={styles.statItemLabel}>Humidity</Text>
+                  </View>
+                  <View style={styles.statDividerV} />
+                  <View style={styles.statItemPremium}>
+                    <Text style={styles.statItemEmoji}>💨</Text>
+                    <Text style={styles.statItemValue}>{weatherData.windSpeed}</Text>
+                    <Text style={styles.statItemLabel}>km/h Wind</Text>
+                  </View>
+                </View>
+              )}
+            </View>
           </View>
 
-          {/* Weekly Forecast */}
-          <View
-            style={[
-              styles.weeklyForecastCard,
-              // Animation removed
-            ]}
-          >
-            <LinearGradient
-              colors={['#FFFFFF', '#F8FDF9']}
-              style={styles.forecastCardGradient}
-            >
-              <View style={styles.forecastHeader}>
-                <Text style={styles.forecastTitle}>{t('weather.weekTitle')}</Text>
-                <View style={[styles.forecastBadge, { backgroundColor: 'rgba(76, 175, 80, 0.1)' }]}>
-                  <Text style={[styles.forecastBadgeText, { color: '#4CAF50' }]}>WEEK</Text>
+          {/* ── 7-Day Forecast — Pro Dashboard ── */}
+          {(() => {
+            const getIcon = (code: number) => {
+              if (code === 1000 || code === 1100) return '☀️';
+              if (code === 1101) return '⛅';
+              if (code === 1001 || code === 1102) return '☁️';
+              if (code === 4000 || code === 4200) return '🌦️';
+              if (code === 4001 || code === 4201) return '🌧️';
+              if (code === 8000) return '⛈️';
+              if (code >= 5000 && code <= 5101) return '🌨️';
+              return '🌤️';
+            };
+            const getConditionLabel = (code: number) => {
+              if (code === 1000) return 'Sunny';
+              if (code === 1100) return 'Mostly Clear';
+              if (code === 1101) return 'Partly Cloudy';
+              if (code === 1001 || code === 1102) return 'Overcast';
+              if (code === 4000) return 'Light Drizzle';
+              if (code === 4200) return 'Light Rain';
+              if (code === 4001 || code === 4201) return 'Rain Showers';
+              if (code === 8000) return 'Thunderstorm';
+              if (code >= 5000 && code <= 5101) return 'Snowfall';
+              return 'Variable';
+            };
+            // Color theme per weather type
+            const getCardTheme = (code: number, isSelected: boolean) => {
+              if (!isSelected) return { bg: '#F9FAFB', border: '#F3F4F6', textPrimary: '#1A1A1A', textSub: '#9CA3AF' };
+              if (code === 1000 || code === 1100) return { bg: '#FEF9C3', border: '#FDE047', textPrimary: '#713F12', textSub: '#92400E' };
+              if (code === 1101) return { bg: '#F0FDF4', border: '#2E7D32', textPrimary: '#1B5E20', textSub: '#388E3C' };
+              if (code === 1001 || code === 1102) return { bg: '#F8FAFC', border: '#94A3B8', textPrimary: '#334155', textSub: '#64748B' };
+              if (code >= 4000 && code <= 4201) return { bg: '#EFF6FF', border: '#3B82F6', textPrimary: '#1D4ED8', textSub: '#3B82F6' };
+              if (code === 8000) return { bg: '#FFF1F2', border: '#F43F5E', textPrimary: '#9F1239', textSub: '#E11D48' };
+              return { bg: '#F0FDF4', border: '#2E7D32', textPrimary: '#1B5E20', textSub: '#388E3C' };
+            };
+            const days = Array.from({ length: 7 }).map((_, index) => {
+              const day = weeklyForecast[index] || {
+                date: new Date(Date.now() + index * 24 * 60 * 60 * 1000).toISOString(),
+                temperatureMax: null, temperatureMin: null,
+                weatherCode: 1101, precipitationProbability: 0,
+                humidity: null, windSpeed: null,
+              };
+              const date = new Date(day.date);
+              const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+              const fullDayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+              return {
+                ...day,
+                dayName: index === 0 ? 'Today' : dayNames[date.getDay()],
+                fullDayName: index === 0 ? 'Today' : fullDayNames[date.getDay()],
+                dateLabel: date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+                index, date
+              };
+            });
+
+            // Compute temp range for relative bar visualization
+            const allMax = days.map(d => Number(d.temperatureMax)).filter(n => !isNaN(n));
+            const allMin = days.map(d => Number(d.temperatureMin)).filter(n => !isNaN(n));
+            const globalMax = allMax.length ? Math.max(...allMax) : 40;
+            const globalMin = allMin.length ? Math.min(...allMin) : 10;
+            const range = Math.max(globalMax - globalMin, 1);
+
+            return (
+              <View style={styles.weeklyCardPremium}>
+                {/* Card header row */}
+                <View style={styles.weeklyCardTitleRow}>
+                  <View>
+                    <Text style={styles.weeklyCardTitle}>7-Day Forecast</Text>
+                    {!isMobile && <Text style={styles.weeklySubtitle}>Tap any day for detailed breakdown</Text>}
+                  </View>
+                  {selectedDay && (
+                    <TouchableOpacity onPress={() => setSelectedDay(null)} style={styles.clearSelBtn}>
+                      <X size={14} color="#6B7280" />
+                      <Text style={{ fontSize: 11, color: '#6B7280', marginLeft: 4 }}>Clear</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.forecastGrid}
-              >
-                {Array.from({ length: 7 }).map((_, index) => {
-                  // Get forecast data for this day or use fallback
-                  const day = weeklyForecast[index] || {
-                    date: new Date(Date.now() + index * 24 * 60 * 60 * 1000).toISOString(),
-                    temperatureMax: 28,
-                    temperatureMin: 18,
-                    weatherCode: 1101,
-                    precipitationProbability: 20
-                  };
 
-                  const date = new Date(day.date);
-                  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                  const dayName = index === 0 ? 'Today' : dayNames[date.getDay()];
+                {/* ── DESKTOP: Dashboard card row ── */}
+                {!isMobile ? (
+                  <View style={styles.desktopForecastGrid}>
+                    {days.map((day) => {
+                      const isSelected = selectedDay?.index === day.index;
+                      const theme = getCardTheme(day.weatherCode, isSelected);
+                      const maxN = Number(day.temperatureMax);
+                      const minN = Number(day.temperatureMin);
+                      const barStart = isNaN(minN) ? 0 : ((minN - globalMin) / range);
+                      const barWidth = isNaN(maxN) || isNaN(minN) ? 0.5 : ((maxN - minN) / range);
+                      return (
+                        <TouchableOpacity
+                          key={day.index}
+                          onPress={() => setSelectedDay(isSelected ? null : day)}
+                          activeOpacity={0.8}
+                          style={[
+                            styles.desktopDayCardPro,
+                            { backgroundColor: theme.bg, borderColor: theme.border },
+                          ]}
+                        >
+                          {/* Day name + date */}
+                          <Text style={[styles.desktopDayName, { color: theme.textPrimary }]}>{day.dayName}</Text>
+                          <Text style={styles.desktopDayDate}>{day.dateLabel}</Text>
 
-                  // Map weather code to icon
-                  const getIconFromCode = (code: number) => {
-                    if (code === 1000 || code === 1100) return '☀️';
-                    if (code === 1101) return '⛅';
-                    if (code === 1001 || code === 1102) return '☁️';
-                    if (code === 4000 || code === 4200) return '🌦️';
-                    if (code === 4001 || code === 4201) return '🌧️';
-                    if (code === 8000) return '⛈️';
-                    if (code >= 5000 && code <= 5101) return '🌨️';
-                    return '🌤️';
-                  };
+                          {/* Large weather emoji */}
+                          <Text style={styles.desktopDayEmoji}>{getIcon(day.weatherCode)}</Text>
 
-                  return (
-                    <View
-                      key={index}
-                      style={[
-                        styles.dailyForecastCard,
-                        index === 0 && styles.todayCard,
-                        index === 0 && { borderColor: '#4CAF50' }
-                      ]}
+                          {/* High temp */}
+                          <Text style={[styles.desktopDayHigh, { color: theme.textPrimary }]}>
+                            {day.temperatureMax !== null ? `${day.temperatureMax}°` : '--'}
+                          </Text>
+
+
+                          {/* Low temp */}
+                          <Text style={styles.desktopDayLow}>
+                            {day.temperatureMin !== null ? `${day.temperatureMin}°` : '--'}
+                          </Text>
+
+                          {/* Rain probability */}
+                          <View style={styles.desktopRainRow}>
+                            <Text style={{ fontSize: 10 }}>💧</Text>
+                            <Text style={[styles.desktopRainText, { color: theme.textSub }]}>{day.precipitationProbability ?? 0}%</Text>
+                          </View>
+
+                          {/* Selected indicator underline */}
+                          {isSelected && <View style={[styles.desktopSelectedBar, { backgroundColor: theme.border }]} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  /* ── MOBILE: Horizontal scroll strip ── */
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 4, gap: 8 }}
+                  >
+                    {days.map((day) => {
+                      const isSelected = selectedDay?.index === day.index;
+                      return (
+                        <TouchableOpacity
+                          key={day.index}
+                          onPress={() => setSelectedDay(isSelected ? null : day)}
+                          activeOpacity={0.75}
+                          style={[
+                            styles.dayPillPremium,
+                            day.index === 0 && styles.dayPillToday,
+                            isSelected && styles.dayPillSelected,
+                          ]}
+                        >
+                          <Text style={[styles.dayPillName, day.index === 0 && { color: '#2E7D32' }, isSelected && { color: '#fff', fontWeight: '700' }]}>{day.dayName}</Text>
+                          <Text style={{ fontSize: 22 }}>{getIcon(day.weatherCode)}</Text>
+                          <Text style={[styles.dayPillHigh, day.index === 0 && { color: '#2E7D32' }, isSelected && { color: '#fff' }]}>
+                            {day.temperatureMax !== null ? `${day.temperatureMax}°` : '--'}
+                          </Text>
+                          <Text style={[styles.dayPillLow, isSelected && { color: 'rgba(255,255,255,0.7)' }]}>
+                            {day.temperatureMin !== null ? `${day.temperatureMin}°` : '--'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+
+                {/* ── DESKTOP: Rich expanded detail panel ── */}
+                {!isMobile && selectedDay && (
+                  <View style={{ flexDirection: 'row', marginHorizontal: 16, marginTop: 8, marginBottom: 8, borderRadius: 16, overflow: 'hidden' }}>
+                    {/* Gradient left hero section */}
+                    <LinearGradient
+                      colors={['#1B5E20', '#2E7D32', '#388E3C']}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                      style={styles.detailPanelHero}
                     >
-                      <Text style={[
-                        styles.dayName,
-                        index === 0 && styles.todayText,
-                        index === 0 && { color: '#4CAF50' }
-                      ]}>
-                        {dayName}
-                      </Text>
-                      <View style={styles.dayIconContainer}>
-                        <View style={[
-                          styles.dayIconWrapper,
-                          index === 0 && styles.todayIconWrapper,
-                          index === 0 && { backgroundColor: 'rgba(76, 175, 80, 0.2)' }
-                        ]}>
-                          <Text style={{ fontSize: 20 }}>{getIconFromCode(day.weatherCode)}</Text>
+                      <Text style={styles.detailHeroDayFull}>{selectedDay.fullDayName}</Text>
+                      <Text style={styles.detailHeroDate}>{selectedDay.dateLabel}</Text>
+                      <Text style={styles.detailHeroEmoji}>{getIcon(selectedDay.weatherCode)}</Text>
+                      <Text style={styles.detailHeroCondition}>{getConditionLabel(selectedDay.weatherCode)}</Text>
+                      <View style={styles.detailHeroTempRow}>
+                        <Text style={styles.detailHeroMax}>{selectedDay.temperatureMax !== null ? `${selectedDay.temperatureMax}°` : '--'}</Text>
+                        <Text style={styles.detailHeroSep}>/</Text>
+                        <Text style={styles.detailHeroMin}>{selectedDay.temperatureMin !== null ? `${selectedDay.temperatureMin}°` : '--'}</Text>
+                      </View>
+                    </LinearGradient>
+
+                    {/* Right stats grid */}
+                    <View style={styles.detailPanelStats}>
+
+                      {/* Stats 2-column grid */}
+                      <View style={styles.detailStatsGrid}>
+                        <View style={styles.detailStatBox}>
+                          <Text style={styles.detailStatEmoji}>💧</Text>
+                          <Text style={styles.detailStatValue}>{selectedDay.precipitationProbability ?? 0}%</Text>
+                          <Text style={styles.detailStatLabel}>Precipitation</Text>
+                        </View>
+                        <View style={styles.detailStatBox}>
+                          <Text style={styles.detailStatEmoji}>🌫️</Text>
+                          <Text style={styles.detailStatValue}>{selectedDay.humidity !== null ? `${selectedDay.humidity}%` : '--'}</Text>
+                          <Text style={styles.detailStatLabel}>Humidity</Text>
+                        </View>
+                        <View style={styles.detailStatBox}>
+                          <Text style={styles.detailStatEmoji}>💨</Text>
+                          <Text style={styles.detailStatValue}>{selectedDay.windSpeed !== null ? `${selectedDay.windSpeed}` : '--'}</Text>
+                          <Text style={styles.detailStatLabel}>Wind km/h</Text>
+                        </View>
+                        <View style={styles.detailStatBox}>
+                          <Text style={styles.detailStatEmoji}>📅</Text>
+                          <Text style={styles.detailStatValue}>{selectedDay.dateLabel}</Text>
+                          <Text style={styles.detailStatLabel}>Date</Text>
                         </View>
                       </View>
-                      <View style={styles.dayTemps}>
-                        <Text style={[
-                          styles.highTemp,
-                          index === 0 && styles.todayTemp,
-                          index === 0 && { color: '#4CAF50' }
-                        ]}>
-                          {day.temperatureMax}°
-                        </Text>
-                        <Text style={styles.lowTemp}>{day.temperatureMin}°</Text>
-                      </View>
                     </View>
-                  );
-                })}
-              </ScrollView>
-            </LinearGradient>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
+
+
+          {/* ── MOBILE: Bottom sheet modal for selected day ── */}
+          {isMobile && (
+            <Modal
+              visible={selectedDay !== null}
+              animationType="slide"
+              transparent
+              onRequestClose={() => setSelectedDay(null)}
+            >
+              <View style={styles.dayModalOverlay}>
+                <TouchableOpacity style={{ flex: 1 }} onPress={() => setSelectedDay(null)} />
+                <View style={styles.dayModalSheet}>
+                  {/* Handle */}
+                  <View style={styles.dayModalHandle} />
+                  {selectedDay && (() => {
+                    const getIcon = (code: number) => {
+                      if (code === 1000 || code === 1100) return '☀️';
+                      if (code === 1101) return '⛅';
+                      if (code === 1001 || code === 1102) return '☁️';
+                      if (code === 4000 || code === 4200) return '🌦️';
+                      if (code === 4001 || code === 4201) return '🌧️';
+                      if (code === 8000) return '⛈️';
+                      if (code >= 5000 && code <= 5101) return '🌨️';
+                      return '🌤️';
+                    };
+                    const getConditionLabel = (code: number) => {
+                      if (code === 1000) return 'Sunny';
+                      if (code === 1100) return 'Mostly Clear';
+                      if (code === 1101) return 'Partly Cloudy';
+                      if (code === 1001 || code === 1102) return 'Cloudy';
+                      if (code === 4000) return 'Light Drizzle';
+                      if (code === 4200) return 'Light Rain';
+                      if (code === 4001 || code === 4201) return 'Rain';
+                      if (code === 8000) return 'Thunderstorm';
+                      if (code >= 5000 && code <= 5101) return 'Snow';
+                      return 'Variable';
+                    };
+                    return (
+                      <>
+                        {/* Green gradient header */}
+                        <LinearGradient
+                          colors={['#1B5E20', '#2E7D32']}
+                          style={styles.dayModalHeader}
+                          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                        >
+                          <View>
+                            <Text style={styles.dayModalDayName}>{selectedDay.dayName}</Text>
+                            <Text style={styles.dayModalCondition}>{getConditionLabel(selectedDay.weatherCode)}</Text>
+                          </View>
+                          <Text style={styles.dayModalEmoji}>{getIcon(selectedDay.weatherCode)}</Text>
+                        </LinearGradient>
+
+                        {/* Stats grid */}
+                        <View style={styles.dayModalGrid}>
+                          <View style={styles.dayModalStat}>
+                            <Text style={styles.dayModalStatEmoji}>🔺</Text>
+                            <Text style={styles.dayModalStatValue}>{selectedDay.temperatureMax}°C</Text>
+                            <Text style={styles.dayModalStatLabel}>High</Text>
+                          </View>
+                          <View style={styles.dayModalStat}>
+                            <Text style={styles.dayModalStatEmoji}>🔻</Text>
+                            <Text style={styles.dayModalStatValue}>{selectedDay.temperatureMin}°C</Text>
+                            <Text style={styles.dayModalStatLabel}>Low</Text>
+                          </View>
+                          <View style={styles.dayModalStat}>
+                            <Text style={styles.dayModalStatEmoji}>💧</Text>
+                            <Text style={styles.dayModalStatValue}>{selectedDay.precipitationProbability}%</Text>
+                            <Text style={styles.dayModalStatLabel}>Rain</Text>
+                          </View>
+                          <View style={styles.dayModalStat}>
+                            <Text style={styles.dayModalStatEmoji}>🌫️</Text>
+                            <Text style={styles.dayModalStatValue}>{selectedDay.humidity ?? '--'}%</Text>
+                            <Text style={styles.dayModalStatLabel}>Humidity</Text>
+                          </View>
+                          <View style={styles.dayModalStat}>
+                            <Text style={styles.dayModalStatEmoji}>💨</Text>
+                            <Text style={styles.dayModalStatValue}>{selectedDay.windSpeed ?? '--'}</Text>
+                            <Text style={styles.dayModalStatLabel}>km/h</Text>
+                          </View>
+                          <View style={styles.dayModalStat}>
+                            <Text style={styles.dayModalStatEmoji}>📅</Text>
+                            <Text style={styles.dayModalStatValue}>
+                              {new Date(selectedDay.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            </Text>
+                            <Text style={styles.dayModalStatLabel}>Date</Text>
+                          </View>
+                        </View>
+
+                        <TouchableOpacity style={styles.dayModalCloseBtn} onPress={() => setSelectedDay(null)}>
+                          <Text style={styles.dayModalCloseBtnText}>Close</Text>
+                        </TouchableOpacity>
+                      </>
+                    );
+                  })()}
+                </View>
+              </View>
+            </Modal>
+          )}
+
+
+          {/* AI Insight Card */}
+          <View style={styles.aiInsightCard}>
+            {/* Left green accent bar */}
+            <View style={styles.aiInsightAccent} />
+            <View style={{ flex: 1 }}>
+              <View style={styles.aiInsightHeader}>
+                <Sparkles size={15} color="#2E7D32" />
+                <Text style={styles.aiInsightTitle}>AI Insight</Text>
+                {!isLoadingAdvisory && (
+                  <View style={styles.aiInsightBadge}>
+                    <Text style={styles.aiInsightBadgeText}>Fresh</Text>
+                  </View>
+                )}
+              </View>
+
+              {isLoadingAdvisory ? (
+                <View style={styles.aiThinkingContainer}>
+                  <View style={styles.thinkingStep}>
+                    <Text style={styles.thinkingCheck}>✔</Text>
+                    <Text style={styles.thinkingStepText}>Weather fetched</Text>
+                  </View>
+                  <View style={styles.thinkingStep}>
+                    <Text style={styles.thinkingCheck}>✔</Text>
+                    <Text style={styles.thinkingStepText}>Soil data analyzed</Text>
+                  </View>
+                  <View style={styles.thinkingStep}>
+                    <Animated.Text style={[styles.thinkingHourglass, {
+                      opacity: glowAnimation.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] })
+                    }]}>⏳</Animated.Text>
+                    <Text style={[styles.thinkingStepText, { color: '#2E7D32', fontWeight: '600' }]}>Generating advice...</Text>
+                  </View>
+                </View>
+              ) : (
+                <Text style={styles.aiInsightText}>{aiAdvisory}</Text>
+              )}
+            </View>
           </View>
         </View>
 
@@ -4050,6 +4011,898 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     textAlign: 'center',
+  },
+
+  // ── Premium Weather Redesign Styles ──────────────────────────────
+  locationRowClean: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 6,
+    gap: 6,
+  },
+  locationTextClean: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '400',
+    color: '#6B7280',
+    letterSpacing: 0.2,
+  },
+  liveChip: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  liveChipText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#2E7D32',
+    letterSpacing: 0.8,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+
+  // Weather card — white, rounded, soft shadow
+  weatherCardClean: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+
+  // Skeleton loader
+  skeletonWrapper: {
+    gap: 12,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  skeletonBlock: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 6,
+  },
+
+  // Temp + condition
+  tempConditionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  tempBig: {
+    fontSize: 48,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    lineHeight: 56,
+    letterSpacing: -1,
+  },
+  conditionLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1A1A1A',
+    marginTop: 2,
+  },
+  feelsLikeLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  weatherEmoji: {
+    fontSize: 52,
+  },
+
+  // Stats row
+  statsRowClean: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 12,
+  },
+  statChip: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+  },
+  statChipIcon: {
+    fontSize: 18,
+  },
+  statChipValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  statChipLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+  statChipDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: '#E5E7EB',
+  },
+
+  // Weekly forecast strip
+  weeklyStripCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  weeklyStripTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  dayChip: {
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 4,
+    marginHorizontal: 4,
+  },
+  dayChipToday: {
+    backgroundColor: '#F0FDF4',
+  },
+  dayChipName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B7280',
+    letterSpacing: 0.3,
+  },
+  dayChipHigh: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  dayChipLow: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+
+  // AI Advisory card
+  advisoryCardClean: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  advisoryCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  advisoryCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  advisoryCardText: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 22,
+    fontWeight: '400',
+  },
+
+  // AI thinking progress
+  aiThinkingContainer: {
+    gap: 8,
+  },
+  thinkingStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  thinkingCheck: {
+    fontSize: 14,
+    color: '#2E7D32',
+    fontWeight: '700',
+  },
+  thinkingHourglass: {
+    fontSize: 14,
+  },
+  thinkingStepText: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '400',
+  },
+
+  // ── Premium Weather Card v2 ───────────────────────────────────────
+  weatherCardPremium: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+    overflow: 'hidden',
+  },
+  weatherCardHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 22,
+  },
+  weatherHeaderTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  weatherLocationText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.8)',
+    letterSpacing: 0.3,
+  },
+  liveChipPremium: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#A7F3D0',
+  },
+  liveChipPremiumText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 1,
+  },
+  weatherHeaderMain: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tempHuge: {
+    fontSize: 52,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -1.5,
+    lineHeight: 60,
+  },
+  conditionBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  conditionBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  feelsLikeMuted: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.65)',
+    marginTop: 6,
+    fontWeight: '400',
+  },
+  weatherEmojiLg: {
+    fontSize: 60,
+  },
+  skeletonBlockLight: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 8,
+  },
+  weatherCardBody: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  statsRowPremium: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  statItemPremium: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statItemEmoji: {
+    fontSize: 22,
+  },
+  statItemValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: -0.3,
+  },
+  statItemLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  statDividerV: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#E5E7EB',
+  },
+
+  // Weekly strip
+  weeklyCardPremium: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 10,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  weeklyCardTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  dayPillPremium: {
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+    gap: 5,
+    minWidth: 58,
+  },
+  dayPillToday: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  dayPillName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B7280',
+    letterSpacing: 0.2,
+  },
+  dayPillHigh: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  dayPillLow: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+
+  // AI Insight card with left accent bar
+  aiInsightCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+    overflow: 'hidden',
+    gap: 14,
+  },
+  aiInsightAccent: {
+    width: 4,
+    borderRadius: 100,
+    backgroundColor: '#2E7D32',
+    alignSelf: 'stretch',
+  },
+  aiInsightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 10,
+  },
+  aiInsightTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    flex: 1,
+  },
+  aiInsightBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  aiInsightBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#2E7D32',
+    letterSpacing: 0.3,
+  },
+  aiInsightText: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 22,
+    fontWeight: '400',
+  },
+
+  // ── Clickable 7-Day Forecast Styles ──────────────────────────────
+  weeklyCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  clearSelBtn: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 100,
+    padding: 6,
+  },
+
+  // Mobile selected pill (green fill)
+  dayPillSelected: {
+    backgroundColor: '#2E7D32',
+    borderWidth: 0,
+  },
+
+  // Desktop grid layout (7 equal columns)
+  desktopForecastGrid: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  desktopDayCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    backgroundColor: '#F9FAFB',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  desktopDayCardSelected: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#2E7D32',
+    borderWidth: 2,
+    shadowColor: '#2E7D32',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  desktopSelectedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2E7D32',
+    marginTop: 4,
+  },
+
+  // Desktop detail panel (expands inside the card below the grid)
+  desktopDetailPanel: {
+    flexDirection: 'row',
+    margin: 16,
+    marginTop: 4,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  desktopDetailLeft: {
+    backgroundColor: '#2E7D32',
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 120,
+    gap: 6,
+  },
+  desktopDetailDay: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  desktopDetailCondition: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+  },
+  desktopDetailEmoji: {
+    fontSize: 36,
+    marginTop: 4,
+  },
+  desktopDetailRight: {
+    flex: 1,
+    padding: 16,
+    gap: 10,
+  },
+  desktopDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  desktopDetailLabel: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  desktopDetailValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+
+  // Mobile bottom sheet modal
+  dayModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  dayModalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    paddingBottom: 34,
+  },
+  dayModalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  dayModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    marginTop: 8,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  dayModalDayName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  dayModalCondition: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 3,
+    fontWeight: '400',
+  },
+  dayModalEmoji: {
+    fontSize: 56,
+  },
+  dayModalGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    gap: 10,
+    marginBottom: 20,
+  },
+  dayModalStat: {
+    width: '30%',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  dayModalStatEmoji: {
+    fontSize: 22,
+  },
+  dayModalStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: -0.3,
+  },
+  dayModalStatLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  dayModalCloseBtn: {
+    backgroundColor: '#2E7D32',
+    marginHorizontal: 16,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  dayModalCloseBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+
+  // ── Pro Dashboard Forecast Styles ────────────────────────────────
+  weeklySubtitle: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '400',
+    marginTop: 2,
+  },
+
+  // Desktop day card — themed
+  desktopDayCardPro: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    gap: 6,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  desktopDayName: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  desktopDayDate: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+  desktopDayEmoji: {
+    fontSize: 32,
+    marginVertical: 4,
+  },
+  desktopDayHigh: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  tempBarTrack: {
+    width: '100%',
+    height: 4,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 100,
+    overflow: 'hidden',
+    marginVertical: 2,
+  },
+  tempBarFill: {
+    height: 4,
+    borderRadius: 100,
+    minWidth: 6,
+  },
+  desktopDayLow: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  desktopRainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 2,
+  },
+  desktopRainText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  desktopSelectedBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    borderRadius: 100,
+  },
+
+  // Detail panel — pro hero + stats
+  detailPanelPro: {
+    flexDirection: 'row',
+    margin: 16,
+    marginTop: 8,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#1B5E20',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  detailPanelHero: {
+    width: 180,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  detailHeroDayFull: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  detailHeroDate: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '400',
+  },
+  detailHeroEmoji: {
+    fontSize: 52,
+    marginVertical: 8,
+  },
+  detailHeroCondition: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.2,
+  },
+  detailHeroTempRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginTop: 6,
+  },
+  detailHeroMax: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -1,
+  },
+  detailHeroSep: {
+    fontSize: 20,
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: '300',
+  },
+  detailHeroMin: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+  },
+
+  // Stats side
+  detailPanelStats: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    gap: 12,
+  },
+  detailTempRangeSection: {
+    gap: 6,
+  },
+  detailSectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  detailRangeTrack: {
+    height: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 100,
+    overflow: 'hidden',
+  },
+  detailRangeFill: {
+    height: 8,
+    borderRadius: 100,
+    backgroundColor: '#2E7D32',
+    minWidth: 12,
+  },
+  detailRangeMin: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  detailRangeMax: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  detailStatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  detailStatBox: {
+    width: '47%',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  detailStatEmoji: {
+    fontSize: 20,
+  },
+  detailStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: -0.3,
+  },
+  detailStatLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
 });
 
