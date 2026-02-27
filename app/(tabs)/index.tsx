@@ -391,12 +391,18 @@ export default function HomeScreen() {
             if (event.results[0].isFinal) {
               setIsListening(false);
 
+              // Enhanced speech recognition validation
               if (isValidSpeechInput(transcript, confidence)) {
                 console.log('✅ Valid speech recognized:', { transcript, confidence });
                 handleVoiceInput(transcript, confidence);
               } else {
-                console.log('❌ Invalid speech ignored, returning to idle:', { transcript, confidence });
-                // We do NOT auto-restart here to prevent infinite loop bugs from background noise.
+                console.log('❌ Invalid speech ignored:', { transcript, confidence });
+                // Auto-restart listening for next valid input
+                setTimeout(() => {
+                  if (!isSpeaking && !isProcessing) {
+                    startListening();
+                  }
+                }, 1000);
               }
             } else {
               console.log('⏳ Interim result (not final), waiting...');
@@ -425,8 +431,13 @@ export default function HomeScreen() {
           }
 
           if (event.error === 'no-speech') {
-            console.log('⚠️ No speech detected. Stopping listening.');
-            // Removed auto-retry to prevent infinite listening loops
+            // Very common, silent retry often best
+            console.log('⚠️ No speech detected, retrying silently...');
+            if (!isSpeaking && !isProcessing) {
+              // Retry quickly without alert
+              if (errorRestartTimeoutRef.current) clearTimeout(errorRestartTimeoutRef.current);
+              errorRestartTimeoutRef.current = setTimeout(() => startListening(), 500) as unknown as number;
+            }
             return;
           }
 
@@ -1486,29 +1497,74 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
     }
   };
 
-  // Legacy full-response compatibility & error handling 
+  // Simple, reliable TTS speaker — waits for audio to fully play before returning
   const speakResponse = async (text: string, autoStartListening: boolean = false) => {
+    if (!text || !text.trim()) {
+      console.warn('speakResponse called with empty text');
+      setIsProcessing(false);
+      if (autoStartListening) setTimeout(() => startListening(), 800);
+      return;
+    }
+
     stopListening();
     setIsSpeaking(false);
-    setIsThinking(true);
+    setIsThinking(true);    // Show thinking state while the TTS audio downloads
     setIsProcessing(true);
 
-    // Clear any previous queue
-    if (audioQueue.current.queue.length > 0) {
-      audioQueue.current.queue = [];
+    let sound: Audio.Sound | null = null;
+
+    try {
+      console.log('TTS preloading audio...');
+      sound = await preloadTtsAudio(text);
+
+      if (!sound) {
+        throw new Error('TTS preload returned null');
+      }
+
+      // Audio is ready — switch to Speaking animation
+      setIsThinking(false);
+      setIsSpeaking(true);
+      startSpeakingAnimation();
+      console.log('TTS playing audio now');
+
+      // Wait for playback to complete
+      await new Promise<void>((resolve) => {
+        sound!.setOnPlaybackStatusUpdate((status) => {
+          if ('didJustFinish' in status && status.didJustFinish) {
+            sound!.unloadAsync();
+            resolve();
+          } else if ('error' in status && status.error) {
+            console.error('TTS playback error:', status.error);
+            sound!.unloadAsync();
+            resolve();
+          }
+        });
+        sound!.playAsync().catch((err) => {
+          console.error('TTS playAsync failed:', err);
+          resolve();
+        });
+      });
+
+      console.log('TTS completed successfully');
+
+    } catch (err) {
+      console.error('speakResponse error:', err instanceof Error ? err.message : String(err));
+      if (sound) sound.unloadAsync();
+    } finally {
+      stopSpeakingAnimation();
+      setIsSpeaking(false);
+      setIsThinking(false);
+      setIsProcessing(false);
+
+      if (autoStartListening) {
+        setTimeout(() => {
+          if (!isSpeaking && !isProcessing) {
+            console.log('Auto-starting listening after TTS');
+            startListening();
+          }
+        }, 800);
+      }
     }
-    audioQueue.current.isFinished = true; // No more streaming
-
-    // Enqueue single response
-    audioQueue.current.queue.push({
-      text,
-      soundPromise: preloadTtsAudio(text).catch(e => {
-        console.error('Failed to preload speakResponse:', e);
-        return null;
-      })
-    });
-
-    processAudioQueue(autoStartListening);
   };
 
   useEffect(() => {
@@ -1544,9 +1600,15 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
       return;
     }
 
+    // Additional validation for recognized speech - only pass valid speech to LLM
     if (!isValidSpeechInput(text, confidence)) {
-      console.log('Invalid speech input, ignoring and returning to idle');
-      // No longer auto-restarting here to prevent infinite listening loops
+      console.log('Invalid speech input, ignoring and restarting listening');
+      // Restart listening for next valid input
+      setTimeout(() => {
+        if (!isSpeaking && !isProcessing) {
+          startListening();
+        }
+      }, 1000);
       return;
     }
 
@@ -1577,8 +1639,9 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
         console.warn('Rate limit exceeded: Too many requests in a short time');
         const timeUntilReset = formatTimeUntilReset(rateLimitStatus.resetTime);
         const rateLimitMessage = `आपने एक मिनट में ${MAX_REQUESTS_PER_WINDOW} अनुरोधों की सीमा पार कर ली है। कृपया ${timeUntilReset} प्रतीक्षा करें और फिर कोशिश करें।`;
+        // SEQUENTIAL: Speak rate limit message with Niraj voice and auto-restart listening
         // Note: isProcessing will be released when TTS completes
-        speakResponse(rateLimitMessage, false);
+        speakResponse(rateLimitMessage, true);
         setConversationHistory([...updatedHistory, { role: "model", parts: rateLimitMessage }]);
         return;
       }
@@ -1637,64 +1700,24 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
           console.warn('Could not fetch user context for AI Orb:', contextError);
         }
 
-        // SEQUENTIAL PROCESSING: Stream response and speak chunks immediately
+        // Get the complete LLM response first
         console.log('LLM response streaming started...');
 
-        // Prepare queue for streaming
-        audioQueue.current.queue = [];
-        audioQueue.current.isPlaying = false;
-        audioQueue.current.isFinished = false;
-
-        // Start in "Thinking" state until the first chunk plays
+        // Show thinking state while generating response
         setIsThinking(true);
         setIsSpeaking(false);
 
-        let currentSentence = '';
-        const sentenceDelimiters = ['.', '?', '!', '\n', '|', '।'];
-
         for await (const chunk of queryLLMStream(text, undefined, userContextForLLM)) {
           finalResponse += chunk;
-          currentSentence += chunk;
-
-          // Check if the current chunk contains a sentence boundary
-          const lastChar = currentSentence.trim().slice(-1);
-          if (sentenceDelimiters.includes(lastChar) && currentSentence.trim().length > 3) {
-            const sentenceToSpeak = currentSentence.trim();
-            console.log('Queueing TTS chunk:', sentenceToSpeak);
-
-            // Push to queue immediately. Start preloading.
-            audioQueue.current.queue.push({
-              text: sentenceToSpeak,
-              soundPromise: preloadTtsAudio(sentenceToSpeak).catch(e => {
-                console.error('Failed to preload chunk:', e);
-                return null;
-              })
-            });
-
-            // Start queue if it isn't already playing (do not auto-restart listening)
-            processAudioQueue(false);
-
-            // Reset for next sentence
-            currentSentence = '';
-          }
         }
 
-        // Handle any leftover text that didn't end in punctuation
-        if (currentSentence.trim().length > 0) {
-          const sentenceToSpeak = currentSentence.trim();
-          console.log('Queueing final TTS chunk:', sentenceToSpeak);
-          audioQueue.current.queue.push({
-            text: sentenceToSpeak,
-            soundPromise: preloadTtsAudio(sentenceToSpeak).catch(e => null)
-          });
-        }
+        console.log('LLM response received, now speaking...');
+        setIsThinking(false);
 
-        // Mark LLM stream complete
-        audioQueue.current.isFinished = true;
-        // Trigger queue again just in case it stopped and there are leftover items
-        processAudioQueue(false);
+        // Speak the complete response (speakResponse handles isSpeaking/isProcessing state)
+        await speakResponse(finalResponse.trim(), true);
 
-        // Add AI response to conversation history once fully generated
+        // Add AI response to conversation history
         setConversationHistory([...updatedHistory, { role: "model", parts: finalResponse }]);
 
         // Save interaction to MongoDB
@@ -1718,8 +1741,9 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
       } catch (apiError: any) {
         console.error('Error calling LLM:', apiError);
         const errorMessage = 'एआई सेवा से अभी जुड़ाव नहीं हो पा रहा। कृपया बाद में पुनः प्रयास करें।';
+        // SEQUENTIAL: Speak error with Niraj voice and auto-restart listening
         // Note: isProcessing will be released when TTS completes
-        speakResponse(errorMessage, false);
+        speakResponse(errorMessage, true);
         setConversationHistory([...updatedHistory, { role: 'model', parts: errorMessage }]);
         // Save error interaction
         try {
