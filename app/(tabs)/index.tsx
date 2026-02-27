@@ -357,10 +357,12 @@ export default function HomeScreen() {
         const recognition = new SpeechRecognition();
         recognition.continuous = false;
         recognition.interimResults = false;
-        // Dynamic language selection based on user preference or i18n
-        const userLang = userData?.preferredLanguage || userData?.profile?.language || 'hi-IN'; // Default to Hindi if not set, or English
-        recognition.lang = userLang === 'en' ? 'en-IN' : userLang;
-        console.log(`✅ Initializing Web Speech Recognition with lang: ${recognition.lang}`);
+        // Force strict Hindi/English (Hinglish) recognition to prevent the browser
+        // from hallucinating Tamil/Malayalam from user profile preferences.
+        const userLang = userData?.preferredLanguage || userData?.profile?.language;
+        console.log(`User profile lang was: ${userLang}, but forcing 'hi-IN' for accuracy.`);
+        recognition.lang = 'hi-IN'; // hi-IN is best for Hinglish support on Web Speech API
+        console.log(`✅ Initializing Web Speech Recognition with strict lang: ${recognition.lang}`);
 
         // Attach ALL event handlers HERE - this ensures they work on mobile browsers too
 
