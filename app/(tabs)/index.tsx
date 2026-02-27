@@ -1236,32 +1236,50 @@ export default function HomeScreen() {
       return false;
     }
 
-    // Remove punctuation and normalize
-    const normalized = text.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+    const raw = text.trim();
 
-    // Length validation
+    // Detect language: does this text have Hindi/Devanagari/Marathi characters?
+    const hasDevanagari = /[\u0900-\u097F]/.test(raw);
+    const hasLatin = /[a-zA-Z]/.test(raw);
+
+    if (hasDevanagari) {
+      // For Devanagari script — just need at least 1 character
+      // Browser STT often returns confidence=0 for Hindi even when correct, so skip confidence check
+      if (raw.length < 1) {
+        console.log('Devanagari speech too short:', raw);
+        return false;
+      }
+      console.log('Valid Devanagari speech:', raw);
+      return true;
+    }
+
+    // For Latin script — apply stricter validation
+    // Remove punctuation only, keep alphanumeric + spaces
+    const normalized = raw.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+
+    // Length validation — require at least 2 chars
     if (normalized.length < 2) {
       console.log('Speech too short:', normalized);
       return false;
     }
 
     // Pattern validation
-    const repeatedChar = /(..)\1{2,}/.test(normalized); // e.g., "aaaa", "haha"
+    const repeatedChar = /(.)\1{3,}/.test(normalized); // e.g., "aaaa" (4+ repeated)
     const vowelsOnly = /^[aeiou\s]+$/i.test(normalized); // likely hums
-    const noAlpha = !/[a-zA-Z]/.test(normalized); // no actual words
 
-    if (repeatedChar || vowelsOnly || noAlpha) {
-      console.log('Invalid speech pattern:', { normalized, repeatedChar, vowelsOnly, noAlpha });
+    if (repeatedChar || vowelsOnly) {
+      console.log('Invalid speech pattern:', { normalized, repeatedChar, vowelsOnly });
       return false;
     }
 
-    // Confidence validation (if provided)
-    if (typeof confidence === 'number' && confidence > 0 && confidence < 0.5) {
+    // Confidence validation — only reject if explicitly low AND non-zero
+    // (confidence=0 often means "not reported", not "no confidence")
+    if (typeof confidence === 'number' && confidence > 0 && confidence < 0.35) {
       console.log('Low confidence speech:', { text: normalized, confidence });
       return false;
     }
 
-    // Common noise words/sounds to ignore
+    // Common English noise words/sounds to ignore
     const noisePatterns = [
       /^(uh|um|ah|hmm|er|eh)$/i,
       /^(la|na|da|ba|wa)$/i,
