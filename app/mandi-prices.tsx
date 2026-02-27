@@ -188,7 +188,7 @@ const MandiCard = ({ mandi }: { mandi: NearestMandi }) => {
           backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center',
           marginRight: 16
         }}>
-          <Text style={{ fontSize: 24 }}>🏢</Text>
+          <Text style={{ fontSize: 24 }}>�</Text>
         </View>
 
         <View style={{ flex: 1 }}>
