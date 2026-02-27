@@ -93,6 +93,7 @@ export default function HomeScreen() {
   const [pulseAnimation] = useState(new Animated.Value(1));
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<{ role: string, parts: string }[]>([]);
   const [audioLevel] = useState(new Animated.Value(1)); // For audio visualization
@@ -1434,17 +1435,21 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
 
     try {
       while (audioQueue.current.queue.length > 0) {
-        // Dequeue next item
         const item = audioQueue.current.queue.shift();
         if (!item) continue;
 
+        // Waiting for LLM/Network — enter "Thinking" state
+        setIsSpeaking(false);
+        setIsThinking(true);
+        const sound = await item.soundPromise;
+
+        if (!sound) continue;
+
+        // Audio is ready to play — switch to "Speaking" state
+        setIsThinking(false);
+        setIsSpeaking(true);
         startSpeakingAnimation();
 
-        // Wait for it to finish preloading (or it might already be done)
-        const sound = await item.soundPromise;
-        if (!sound) continue; // Skip if preload failed
-
-        // Play the sound
         await new Promise<void>((resolve) => {
           sound.setOnPlaybackStatusUpdate((status) => {
             if ('didJustFinish' in status && status.didJustFinish) {
@@ -1464,12 +1469,20 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
       }
     } finally {
       audioQueue.current.isPlaying = false;
-      stopSpeakingAnimation();
+
+      // We finished playing the current queue. If LLM isn't completely done, switch back to thinking
+      if (!audioQueue.current.isFinished && audioQueue.current.queue.length === 0) {
+        setIsSpeaking(false);
+        setIsThinking(true);
+        stopSpeakingAnimation();
+      }
 
       // If queue is empty AND LLM finished streaming entirely
       if (audioQueue.current.isFinished && audioQueue.current.queue.length === 0) {
         setIsSpeaking(false);
+        setIsThinking(false);
         setIsProcessing(false);
+        stopSpeakingAnimation();
         console.log('✅ Streaming TTS fully completed - ready for next input');
 
         if (autoStartListening && !isListening) {
@@ -1487,7 +1500,8 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
   // Legacy full-response compatibility & error handling 
   const speakResponse = async (text: string, autoStartListening: boolean = false) => {
     stopListening();
-    setIsSpeaking(true);
+    setIsSpeaking(false);
+    setIsThinking(true);
     setIsProcessing(true);
 
     // Clear any previous queue
@@ -1648,7 +1662,10 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
         audioQueue.current.queue = [];
         audioQueue.current.isPlaying = false;
         audioQueue.current.isFinished = false;
-        setIsSpeaking(true);
+
+        // Start in "Thinking" state until the first chunk plays
+        setIsThinking(true);
+        setIsSpeaking(false);
 
         let currentSentence = '';
         const sentenceDelimiters = ['.', '?', '!', '\n', '|', '।'];
@@ -2028,7 +2045,7 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
             <AnimatedOrb
               isListening={isListening}
               isSpeaking={isSpeaking}
-              isThinking={false}
+              isThinking={isThinking}
               size={160}
             />
             {/* Overlay the text and icons on top of the orb */}
