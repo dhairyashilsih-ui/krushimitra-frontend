@@ -1421,78 +1421,91 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
     return sound;
   }, []);
 
-  const speakResponse = async (text: string, autoStartListening: boolean = false) => {
-    // SEQUENTIAL PROCESSING: Ensure we are not listening while speaking
-    stopListening();
-    setIsSpeaking(true);
-    setIsProcessing(true); // Block new inputs during TTS
+  // ── Streaming TTS Audio Queue ──
+  const audioQueue = useRef<{
+    queue: { text: string; soundPromise: Promise<Audio.Sound | null> }[];
+    isPlaying: boolean;
+    isFinished: boolean; // Tells queue when LLM is done streaming
+  }>({ queue: [], isPlaying: false, isFinished: false });
 
-    let sound: Audio.Sound | null = null;
+  const processAudioQueue = async (autoStartListening: boolean) => {
+    if (audioQueue.current.isPlaying) return;
+    audioQueue.current.isPlaying = true;
 
     try {
-      // Preload the audio buffer as soon as text is available
-      sound = await preloadTtsAudio(text);
+      while (audioQueue.current.queue.length > 0) {
+        // Dequeue next item
+        const item = audioQueue.current.queue.shift();
+        if (!item) continue;
 
-      if (!sound) {
-        throw new Error('Failed to prepare TTS audio');
+        startSpeakingAnimation();
+
+        // Wait for it to finish preloading (or it might already be done)
+        const sound = await item.soundPromise;
+        if (!sound) continue; // Skip if preload failed
+
+        // Play the sound
+        await new Promise<void>((resolve) => {
+          sound.setOnPlaybackStatusUpdate((status) => {
+            if ('didJustFinish' in status && status.didJustFinish) {
+              sound.unloadAsync();
+              resolve();
+            } else if ('error' in status && status.error) {
+              console.error('TTS playback error chunk:', status.error);
+              sound.unloadAsync();
+              resolve();
+            }
+          });
+          sound.playAsync().catch((err) => {
+            console.error('Error starting playAsync on chunk:', err);
+            resolve();
+          });
+        });
       }
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if ('didJustFinish' in status && status.didJustFinish) {
-          sound?.unloadAsync();
-          stopSpeakingAnimation();
-          setIsSpeaking(false);
-          setIsProcessing(false); // Release processing lock after TTS completion
-
-          console.log('TTS completed - ready for next voice input');
-
-          if (autoStartListening) {
-            setTimeout(() => {
-              if (!isSpeaking && !isProcessing) {
-                console.log('Auto-starting listening after TTS completion');
-                startListening();
-              }
-            }, 1000);
-          }
-        }
-        if ('error' in status && status.error) {
-          console.error('TTS audio playback error:', status.error);
-          stopSpeakingAnimation();
-          setIsSpeaking(false);
-          setIsProcessing(false); // Release processing lock on error
-
-          if (autoStartListening) {
-            setTimeout(() => {
-              if (!isSpeaking && !isProcessing) {
-                startListening();
-              }
-            }, 1000);
-          }
-        }
-      });
-
-      // Kick off orb animation only once audio buffer is ready, then play immediately
-      startSpeakingAnimation();
-      await sound.playAsync();
-    } catch (error) {
-      console.error('TTS error:', error instanceof Error ? error.message : String(error));
-
+    } finally {
+      audioQueue.current.isPlaying = false;
       stopSpeakingAnimation();
-      setIsSpeaking(false);
-      setIsProcessing(false);
 
-      if (sound) {
-        sound.unloadAsync();
-      }
+      // If queue is empty AND LLM finished streaming entirely
+      if (audioQueue.current.isFinished && audioQueue.current.queue.length === 0) {
+        setIsSpeaking(false);
+        setIsProcessing(false);
+        console.log('✅ Streaming TTS fully completed - ready for next input');
 
-      if (autoStartListening) {
-        setTimeout(() => {
-          if (!isSpeaking && !isProcessing) {
-            startListening();
-          }
-        }, 1000);
+        if (autoStartListening && !isListening) {
+          setTimeout(() => {
+            if (!isSpeaking && !isProcessing && !isListening) {
+              console.log('Auto-starting listening after full complete');
+              startListening();
+            }
+          }, 800);
+        }
       }
     }
+  };
+
+  // Legacy full-response compatibility & error handling 
+  const speakResponse = async (text: string, autoStartListening: boolean = false) => {
+    stopListening();
+    setIsSpeaking(true);
+    setIsProcessing(true);
+
+    // Clear any previous queue
+    if (audioQueue.current.queue.length > 0) {
+      audioQueue.current.queue = [];
+    }
+    audioQueue.current.isFinished = true; // No more streaming
+
+    // Enqueue single response
+    audioQueue.current.queue.push({
+      text,
+      soundPromise: preloadTtsAudio(text).catch(e => {
+        console.error('Failed to preload speakResponse:', e);
+        return null;
+      })
+    });
+
+    processAudioQueue(autoStartListening);
   };
 
   useEffect(() => {
@@ -1628,20 +1641,61 @@ Write a short, completely natural 2-sentence greeting in Hindi. Mention the weat
           console.warn('Could not fetch user context for AI Orb:', contextError);
         }
 
-        // SEQUENTIAL PROCESSING: Get complete response first, then speak with Niraj voice
-        // queryLLMStream automatically chooses cloud or local based on availability
-        // Pass user context to LLM
+        // SEQUENTIAL PROCESSING: Stream response and speak chunks immediately
+        console.log('LLM response streaming started...');
+
+        // Prepare queue for streaming
+        audioQueue.current.queue = [];
+        audioQueue.current.isPlaying = false;
+        audioQueue.current.isFinished = false;
+        setIsSpeaking(true);
+
+        let currentSentence = '';
+        const sentenceDelimiters = ['.', '?', '!', '\n', '|', '।'];
+
         for await (const chunk of queryLLMStream(text, undefined, userContextForLLM)) {
           finalResponse += chunk;
+          currentSentence += chunk;
+
+          // Check if the current chunk contains a sentence boundary
+          const lastChar = currentSentence.trim().slice(-1);
+          if (sentenceDelimiters.includes(lastChar) && currentSentence.trim().length > 3) {
+            const sentenceToSpeak = currentSentence.trim();
+            console.log('Queueing TTS chunk:', sentenceToSpeak);
+
+            // Push to queue immediately. Start preloading.
+            audioQueue.current.queue.push({
+              text: sentenceToSpeak,
+              soundPromise: preloadTtsAudio(sentenceToSpeak).catch(e => {
+                console.error('Failed to preload chunk:', e);
+                return null;
+              })
+            });
+
+            // Start queue if it isn't already playing
+            processAudioQueue(true);
+
+            // Reset for next sentence
+            currentSentence = '';
+          }
         }
 
-        console.log('LLM response received, now speaking with Niraj Hindi voice only');
+        // Handle any leftover text that didn't end in punctuation
+        if (currentSentence.trim().length > 0) {
+          const sentenceToSpeak = currentSentence.trim();
+          console.log('Queueing final TTS chunk:', sentenceToSpeak);
+          audioQueue.current.queue.push({
+            text: sentenceToSpeak,
+            soundPromise: preloadTtsAudio(sentenceToSpeak).catch(e => null)
+          });
+        }
 
-        // SEQUENTIAL: Speak complete response with Niraj voice and auto-restart listening
-        // Note: isProcessing remains true until TTS completes
-        speakResponse(finalResponse.trim(), true);
+        // Mark LLM stream complete
+        audioQueue.current.isFinished = true;
+        // Trigger queue again just in case it stopped and there are leftover items
+        processAudioQueue(true);
 
-        // Add AI response to conversation history
+        // Add AI response to conversation history once fully generated
         setConversationHistory([...updatedHistory, { role: "model", parts: finalResponse }]);
 
         // Save interaction to MongoDB
