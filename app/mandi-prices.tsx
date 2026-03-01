@@ -55,7 +55,7 @@ import {
 
 import * as Location from 'expo-location';
 import { serverManager } from '../src/services/serverManager';
-import { queryLLMStream, summarizeConversation } from '../src/services/llm'; // AI Service
+import { queryLLMStream } from '../src/services/llm'; // AI Service
 import { Bot, MessageCircle, Send, User } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -566,18 +566,9 @@ export default function MandiPricesScreen() {
 
       // SLIDING WINDOW LOGIC (Max 10 messages)
       if (newConv.length >= 10) {
-        console.log("Chat history hit 10 messages! Triggering background AI memory summarization...");
-        // 1. Trigger background condensation
-        summarizeConversation(newConv, longTermMemory).then(async (newMem) => {
-          setLongTermMemory(newMem);
-          await AsyncStorage.setItem('ai_longTermMemory', newMem);
-          console.log("Background memory saved to disk.");
-        });
-
-        // 2. Clear the active window but keep the last 2 context rows so user's train of thought doesn't abruptly break
+        // Clear the active window but keep the last 2 context rows so user's train of thought doesn't abruptly break
         newConv = newConv.slice(newConv.length - 2);
       }
-
       setConversation(newConv);
 
     } catch (error) {
